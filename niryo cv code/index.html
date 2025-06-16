@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>3D Force Graph with Card Images</title>
+  <script src="https://unpkg.com/three/build/three.min.js"></script>
+  <script src="https://unpkg.com/3d-force-graph"></script>
+  <style>
+    body { margin: 0; overflow: hidden; background-color: #000; }
+    #graph-container { width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="graph-container"></div>
+  <script>
+    const colorMap = new Map();
+    let colorIndex = 0;
+
+    const getColorForGroup = (group) => {
+      if (!colorMap.has(group)) {
+        const hue = (colorIndex * 137.508) % 360; // golden angle spacing
+        colorMap.set(group, `hsl(${hue}, 70%, 50%)`);
+        colorIndex++;
+      }
+      return colorMap.get(group);
+    };
+
+    fetch('graph_data.json')
+      .then(res => res.json())
+      .then(data => {
+        const graphData = {
+          nodes: data.nodes.map(n => ({
+            id: n.id,
+            label: n.label,
+            group: n.group, // use group for color
+            x: n.x,
+            y: n.y,
+            z: n.z
+          })),
+          links: [] // no links for minimal graph
+        };
+
+        const Graph = ForceGraph3D()(document.getElementById('graph-container'))
+          .graphData(graphData)
+          .nodeColor(node => getColorForGroup(node.group))
+          .nodeLabel(node => node.label)
+          .nodeRelSize(6)
+          .linkWidth(() => 0) // hide links
+          .enableNodeDrag(false)
+          .enableNavigationControls(true)
+          .backgroundColor('#000');
+      });
+  </script>
+</body>
+</html>
