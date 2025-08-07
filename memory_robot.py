@@ -31,8 +31,8 @@ def scan_card_image(square_id):
     # 1) Verify pose
     current_pose = [round(v, 2) for v in robot.arm.get_pose().to_list()]
     target_pose = [round(v, 2) for v in scan_pose]
-    print(f"[DEBUG] Current pose: {current_pose}")
-    print(f"[DEBUG] Target scan pose: {target_pose}")
+    print(f"[DEBUG] Current pose")
+    print(f"[DEBUG] Target scan pose")
 
     if not is_at_scan_pose(current_pose, target_pose, tol=0.1):
         print("[SKIP] Not at scan pose.")
@@ -44,7 +44,8 @@ def scan_card_image(square_id):
 
     print(f"[SCAN] Looking for card at {square_id}")
     last_center = stable_since = detection_time = None
-
+    last_box_debug = 0
+    start_time = time.time() 
     while True:
         try:
             # Step 1: Get image from Niryo camera
@@ -119,9 +120,20 @@ def scan_card_image(square_id):
                     cv2.destroyAllWindows()
 
                     # Step 5: Feature extraction
-                    mean_vec, descriptors = extract_sift_signature(card)
+                    retry_count = 0
+                    while retry_count < 5:
+                        mean_vec, descriptors = extract_sift_signature(card)
+                        if mean_vec is not None and descriptors is not None:
+                            break
+
+                        print(f"[WARN] No features found for {square_id}. Retrying scan... (attempt {retry_count+1})")
+                        robot.tool.release_with_tool()
+                        time.sleep(0.5)
+                        robot.tool.grasp_with_tool()
+                        time.sleep(0.5)
+                        retry_count += 1
                     if mean_vec is None:
-                        print("[WARN] No features found. Skipping.")
+                        print("[FatAL ERROR] Failed to extract features after retries.")
                         return None
 
                     # Step 6: Save & register
@@ -131,7 +143,7 @@ def scan_card_image(square_id):
                     print(f"[ROBOT] Captured {square_id} → {filepath}")
 
                     result = register_card(square_id, mean_vec, descriptors, filepath, debug=True)
-                    print(f"[ROBOT] register_card → {result}")
+                    #print(f"[ROBOT] register_card → {result}")
 
                     gui_queue.put({
                         "status": "reveal",
@@ -141,8 +153,15 @@ def scan_card_image(square_id):
 
                     return result
             else:
-                print("[DEBUG] No valid bounding box found.")
+                now = time.time()
+                if now - last_box_debug > 3.0:
+                    print("[DEBUG] No valid bounding box found.")
+                    last_box_debug = now
 
+                    # if total time exceeds 10 seconds → give up
+                if now - start_time > 15.0:
+                    print("[ERROR] Timed out: Could not detect a valid bounding box in 10 seconds.")                        
+                    return None
 
         except Exception as e:
             print("[FATAL ERROR] Exception in scan_card_image:", e)
@@ -168,20 +187,21 @@ def main_loop():
                 print(f"[ERROR] Missing pose for {square_id}")
                 continue
 
-            # ---- PICK ----
-            print(f"[MOVE] Picking {square_id}")
+                    # ---- PICK ----
+            print(f"[MOVE] Preparing to pick {square_id}")
+            # If the card is in row D, approach via its drop pose first
+            if square_id.startswith('D'):
+                print(f"[MOVE] Approaching row D. Moving to drop pose for {square_id} first.")
+                robot.arm.move_pose(drop_pose)
+            # Now, move to the final pick position
+            print(f"[MOVE] Moving to pick pose for {square_id}")
             robot.arm.move_pose(pick_pose)
-            #time.sleep(0.2)
             robot.tool.grasp_with_tool()
-            print(f"[GRASP] Vacuum activated.")
-            #time.sleep(0.2)
-            robot.arm.move_pose(home_pose)
-            #time.sleep(0.4)
+            robot.arm.move_pose(drop_pose)
 
             # ---- MOVE → SCAN ----
-            print(f"[MOVE] Going to scan pose: {scan_pose}")
+            print(f"[MOVE] Going to scan pose")
             robot.arm.move_pose(scan_pose)
-            #time.sleep(1)
 
             # ---- SCAN ----
             result = scan_card_image(square_id)
