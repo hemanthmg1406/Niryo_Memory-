@@ -28,7 +28,7 @@ score_robot = 0
 # ---------------------- CONFIG ----------------------
 PCA_DIMS                  = 3
 MATCH_DISTANCE_THRESHOLD  = 0.4
-MATCH_KNN_SCORE_THRESHOLD = 0.3
+MATCH_KNN_SCORE_THRESHOLD = 0.5
 
 # ---------------------- MAIN API ----------------------
 def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
@@ -161,6 +161,21 @@ def robot_play(debug=False):
     seen        = set(memory_board.keys())
     matched     = matched_squares
     unmatched   = [sq for sq in seen if sq not in matched]
+    # --- STRATEGY 0: Recall recent pair ---
+    if len(last_flipped) == 2:
+        sq1, sq2 = last_flipped[0], last_flipped[1]
+        
+        # Ensure both squares are actually in memory and not already matched
+        if sq1 in memory_board and sq2 in memory_board and sq1 not in matched and sq2 not in matched:
+            card1, card2 = memory_board[sq1], memory_board[sq2]
+            
+            # Check for a confident match using the official match criteria
+            if is_match(card1["mean"], card1["desc"], card2["mean"], card2["desc"]):
+                log_move("robot_recalled_recent_pair", (sq1, sq2))
+                square_queue.put(sq1)
+                square_queue.put(sq2)
+                last_flipped.clear() # Robot is acting on them, so clear the log
+                return
 
     valid_unmatched = [
         sq for sq in unmatched
@@ -221,7 +236,7 @@ def check_match(m1, m2, d1, d2):
     v3   = pca.fit_transform(vecs)
     dist = np.linalg.norm(v3[0] - v3[1])
     knn  = compute_knn_match_score(d1, d2)
-    return (knn >= MATCH_KNN_SCORE_THRESHOLD or dist <= MATCH_DISTANCE_THRESHOLD), dist, knn
+    return (knn >= MATCH_KNN_SCORE_THRESHOLD) or (dist <= MATCH_DISTANCE_THRESHOLD), dist, knn
 
 def is_match(m1, d1, m2, d2):
     try:

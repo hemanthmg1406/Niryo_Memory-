@@ -2,7 +2,7 @@
 import os
 import random
 import time
-from pyniryo2 import NiryoRobot
+from pyniryo import NiryoRobot
 
 # Connect to Niryo robot
 robot = NiryoRobot("169.254.200.200")

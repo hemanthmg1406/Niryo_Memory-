@@ -127,10 +127,9 @@ def scan_card_image(square_id):
                             break
 
                         print(f"[WARN] No features found for {square_id}. Retrying scan... (attempt {retry_count+1})")
-                        robot.tool.release_with_tool()
-                        time.sleep(0.5)
-                        robot.tool.grasp_with_tool()
-                        time.sleep(0.5)
+                        
+                        time.sleep(0.7)
+                        
                         retry_count += 1
                     if mean_vec is None:
                         print("[FatAL ERROR] Failed to extract features after retries.")
