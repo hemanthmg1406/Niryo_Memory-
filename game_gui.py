@@ -112,8 +112,8 @@ def reset_gui_state():
             grid_rects[lbl] = rect
     
     # ─────────────── 5. Enhanced Buttons (Positioning) ───────────────
-    btn_restart = pygame.Rect( (SIDEBAR_WIDTH - BTN_W) // 2, WINDOW_H - (BTN_H * 2) - 60, BTN_W, BTN_H)
-    btn_quit    = pygame.Rect( (SIDEBAR_WIDTH - BTN_W) // 2, WINDOW_H - BTN_H - 40, BTN_W, BTN_H)
+    btn_restart = pygame.Rect( (SIDEBAR_WIDTH - BTN_W) // 2, WINDOW_H - BTN_H - 100, BTN_W, BTN_H)
+    btn_quit    = pygame.Rect(0,0,0,0) # Effectively hides the quit button
 
 def hit_test(pos) -> Optional[str]:
     for lbl, rect in grid_rects.items():
@@ -178,7 +178,7 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
                 pygame.draw.rect(screen, MISMATCH_BORDER, inner_rect, 5, border_radius=8)
 
     # --- 5. Enhanced Buttons (Drawing) ---
-    for rect, label in ((btn_restart,"Restart Game"), (btn_quit,"Quit Game")):
+    for rect, label in ((btn_restart,"Restart Game"),):
         is_hovered = rect.collidepoint(mouse_pos)
         btn_color = NIRYO_LIGHT_BLUE if is_hovered else NIRYO_BLUE
         
@@ -309,8 +309,7 @@ def run_gui() -> None:
                         try:
                             while True: gui_queue.get_nowait()
                         except queue.Empty: pass
-                        gui_queue.put({"status": "reset"}) # Inform logic to reset
-                        reset_gui_state()
+                        square_queue.put("reset_game") # Send reset command via square_queue
 
 
                     elif current_turn == "human" and hover_lbl and len(recent_clicks) < 2:
@@ -330,8 +329,6 @@ def run_gui() -> None:
                     if btn_restart.collidepoint(mouse_pos):
                         gui_queue.put({"status":"reset"})
                         reset_gui_state()
-                    if btn_quit.collidepoint(mouse_pos):
-                        shutdown_program()
 
         draw_board(hover_lbl, mouse_pos)
         if game_phase == "game_over":

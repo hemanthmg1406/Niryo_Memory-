@@ -70,7 +70,7 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
     desc1 = turn_state["first_desc"]
     reset_turn_state()
     print(f"[LOGIC] Comparing {sq1} vs {square_id}…")
-    match, d, knn = check_match(mean1, mean_vec, desc1, raw_desc)
+    match, d, knn = check_match(sq1, mean1, desc1, square_id, mean_vec, raw_desc)
     reason = "KNN" if knn >= MATCH_KNN_SCORE_THRESHOLD else "PCA" if d <= MATCH_DISTANCE_THRESHOLD else "None"
     print(f"[LOGIC] Compared: PCA={d:.2f}, KNN={knn:.2f} → match={match}")
 
@@ -170,7 +170,7 @@ def robot_play(debug=False):
             card1, card2 = memory_board[sq1], memory_board[sq2]
             
             # Check for a confident match using the official match criteria
-            if is_match(card1["mean"], card1["desc"], card2["mean"], card2["desc"]):
+            if is_match(sq1,card1["mean"], card1["desc"], sq2, card2["mean"], card2["desc"]):
                 log_move("robot_recalled_recent_pair", (sq1, sq2))
                 square_queue.put(sq1)
                 square_queue.put(sq2)
@@ -187,7 +187,7 @@ def robot_play(debug=False):
         for j in range(i + 1, len(valid_unmatched)):
             sq1, sq2 = valid_unmatched[i], valid_unmatched[j]
             card1, card2 = memory_board[sq1], memory_board[sq2]
-            if is_match(card1["mean"], card1["desc"], card2["mean"], card2["desc"]):
+            if is_match(sq1,card1["mean"], card1["desc"], sq2, card2["mean"], card2["desc"]):
                 log_move("robot_matched_pair", (sq1, sq2))
                 square_queue.put(sq1)
                 square_queue.put(sq2)
@@ -230,17 +230,32 @@ def robot_play(debug=False):
     log_move("robot_idle", None)
 
 # ---------------------- HELPERS ----------------------
-def check_match(m1, m2, d1, d2):
+def check_match(sq1_id, m1, d1, sq2_id, m2, d2):
     vecs = np.array([m1, m2])
     pca  = PCA(n_components=min(PCA_DIMS, vecs.shape[0]))
     v3   = pca.fit_transform(vecs)
     dist = np.linalg.norm(v3[0] - v3[1])
     knn  = compute_knn_match_score(d1, d2)
-    return (knn >= MATCH_KNN_SCORE_THRESHOLD) or (dist <= MATCH_DISTANCE_THRESHOLD), dist, knn
+    print("-" * 50)
+    print(f"[COMPARE] Checking pair: {sq1_id} vs {sq2_id}")
+    print(f"[SCORE] PCA Distance: {dist:.4f} (Threshold <= {MATCH_DISTANCE_THRESHOLD})")
+    print(f"[SCORE] KNN Score:    {knn:.4f} (Threshold >= {MATCH_KNN_SCORE_THRESHOLD})")
+    
+    match_pca = (dist <= MATCH_DISTANCE_THRESHOLD)
+    match_knn = (knn >= MATCH_KNN_SCORE_THRESHOLD)
+    
+    match = match_pca or match_knn
+    
+    print(f"[RESULT] Match by PCA: {match_pca}, Match by KNN: {match_knn}")
+    print(f"[RESULT] Final Match Decision: {match}")
+    # ------------------- END NEW LOGGING -------------------
+    
+    return match, dist, knn
 
-def is_match(m1, d1, m2, d2):
+
+def is_match(sq1_id, m1, d1,sq2_id, m2, d2):
     try:
-        return check_match(m1, m2, d1, d2)[0]
+        return check_match(sq1_id,m1, d1,sq2_id, m2, d2)[0]
     except KeyError as e:
         print(f"[LOGIC] is_match() KeyError: {e}")
         return False

@@ -3,7 +3,7 @@ import os
 import time
 import numpy as np
 from memory_queues import square_queue, gui_queue
-from memory_logic import register_card
+from memory_logic import register_card, reset_game
 from sift_utils import *
 from recorded_positions import pick_positions, drop_positions, home_pose, scan_pose, CARD_BOX
 from pyniryo2 import NiryoRobot, NiryoRos, Vision
@@ -178,6 +178,11 @@ def main_loop():
                 continue
 
             square_id = square_queue.get()
+            if square_id == "reset_game":
+                print("[ROBOT] Received reset command.")
+                reset_game()  # Call the reset function from memory_logic
+                continue 
+            
             print(f"[ROBOT] Received square: {square_id}")
             pick_pose = pick_positions.get(square_id)
             drop_pose = drop_positions.get(square_id)
