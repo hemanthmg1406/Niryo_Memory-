@@ -31,6 +31,10 @@ MATCH_DISTANCE_THRESHOLD  = 0.4
 MATCH_KNN_SCORE_THRESHOLD = 0.5
 
 # ---------------------- MAIN API ----------------------
+import sys, queue # Ensure queue is imported at the top of memory_logic.py
+
+# ... (rest of the file's imports and globals)
+
 def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
     global memory_board, turn_state, matched_squares, current_turn, last_flipped
     global score_human, score_robot
@@ -62,6 +66,39 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
         turn_state["first_square"] = square_id
         turn_state["first_mean"]   = mean_vec
         turn_state["first_desc"]   = raw_desc
+        
+        # --- NEW LOGIC: CHECK FOR IMMEDIATE ROBOT MATCH (INTERRUPT) ---
+        if current_turn == "robot":
+            match_found = False
+            # Iterate through all cards currently in the robot's memory
+            for sq_id, card_data in memory_board.items():
+                # Skip the card we just flipped, or any card already matched
+                if sq_id == square_id or sq_id in matched_squares:
+                    continue
+                
+                # Check for a match between the current flip (square_id) and the memory card (sq_id)
+                if is_match(square_id, mean_vec, raw_desc, sq_id, card_data["mean"], card_data["desc"]):
+                    print(f"[ROBOT INTERCEPT] Found immediate match for {square_id}: {sq_id}")
+                    log_move("robot_intercept_pick", (square_id, sq_id))
+                    
+                    # Interruption: Enqueue the correct SECOND pick (sq_id)
+                    square_queue.put(sq_id) 
+                    match_found = True
+                    break # Stop search after finding the first match
+            
+            # If a match was found, the robot has a pre-planned second pick (the incorrect one) 
+            # sitting in the queue. We must discard it.
+            if match_found:
+                try:
+                    # Remove the incorrect pre-planned second pick from the queue.
+                    bad_pick = square_queue.get_nowait()
+                    print(f"[ROBOT INTERCEPT] Discarded incorrect planned pick: {bad_pick}")
+                except queue.Empty:
+                    # This is fine; it just means the robot's thread was slow and hadn't 
+                    # put the second pick in yet, or its strategy only returned one pick.
+                    pass 
+        # --- END NEW LOGIC ---
+
         return {"wait_second": True}
 
     # 6) Second card → compare
@@ -70,11 +107,14 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
     desc1 = turn_state["first_desc"]
     reset_turn_state()
     print(f"[LOGIC] Comparing {sq1} vs {square_id}…")
+    
+    # CORRECT: 6-argument call to check_match with correct argument order
     match, d, knn = check_match(sq1, mean1, desc1, square_id, mean_vec, raw_desc)
+    
     reason = "KNN" if knn >= MATCH_KNN_SCORE_THRESHOLD else "PCA" if d <= MATCH_DISTANCE_THRESHOLD else "None"
     print(f"[LOGIC] Compared: PCA={d:.2f}, KNN={knn:.2f} → match={match}")
 
-    # 7) Build result dict
+    # 7) Build result dict (No Change)
     result = {
         "match":         match,
         "pca_distance":  d,
@@ -84,68 +124,36 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
     }
 
     if match:
-        # Play correct-match sound/LED
+        # ... (Match logic: scoring, GUI updates, etc. - No change)
         play_sound("correct_match_human")
-
-        # Mark matched
         matched_squares.update([sq1, square_id])
         memory_board[sq1]["matched"]       = True
         memory_board[square_id]["matched"] = True
-
-        # --- INCREMENT SCORE ---
-        if current_turn == "human":
-            score_human += 1
-        else:
-            score_robot += 1
-
-        # Notify GUI of match
-        gui_queue.put({
-            "status":  "matched",
-            "squares": [sq1, square_id]
-        })
-        # Send updated scores
-        gui_queue.put({
-            "event":       "score",
-            "human_score": score_human,
-            "robot_score": score_robot,
-        })
+        if current_turn == "human": score_human += 1
+        else: score_robot += 1
+        gui_queue.put({"status":  "matched", "squares": [sq1, square_id]})
+        gui_queue.put({"event": "score", "human_score": score_human, "robot_score": score_robot})
         print(f"[LOGIC] Pair matched: {sq1}, {square_id} → +1 {current_turn}")
         log_move("match", (sq1, square_id))
-        # Continue same turn
         advance_to_next_turn()
 
     else:
-        # Play wrong-match sound/LED (human or robot)
-        if current_turn == "human":
-            play_sound("wrong_match_human")
-        else:
-            play_sound("wrong_match_robot")
-
-        # Flip back
-        gui_queue.put({
-            "status":  "flip_back",
-            "squares": [sq1, square_id]
-        })
+        # ... (Mismatch logic: sound, flip_back, turn switch - No change)
+        if current_turn == "human": play_sound("wrong_match_human")
+        else: play_sound("wrong_match_robot")
+        gui_queue.put({"status":  "flip_back", "squares": [sq1, square_id]})
         print(f"[LOGIC] No match → FLIP_BACK {sq1},{square_id}")
         log_move("mismatch", (sq1, square_id))
-
-        # Switch turn
         new_turn = switch_turn()
-        # Play turn-start sound/LED
-        if new_turn == "human":
-            play_sound("human_turn")
-        else:
-            play_sound("robot_turn")
-
-        gui_queue.put({
-            "event":  "turn",
-            "player": new_turn
-        })
+        if new_turn == "human": play_sound("human_turn")
+        else: play_sound("robot_turn")
+        gui_queue.put({"event":  "turn", "player": new_turn})
         print(f"[LOGIC] Turn → {new_turn}")
 
         # **Schedule the robot’s move automatically**
         if new_turn == "robot":
-            picks = robot_play()
+            # Picks is now expected to be a list due to robot_play update
+            picks = robot_play() 
             for pick in picks:
                 square_queue.put(pick)
 
@@ -154,81 +162,71 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
 # ---------------------- ROBOT STRATEGY ----------------------
 def robot_play(debug=False):
     print("[ROBOT PLAY] Planning robot move...")
-    # Play robot-turn sound/LED at start
     play_sound("robot_turn")
 
     all_squares = [r + c for r in "ABCD" for c in "12345"]
-    seen        = set(memory_board.keys())
-    matched     = matched_squares
-    unmatched   = [sq for sq in seen if sq not in matched]
-    # --- STRATEGY 0: Recall recent pair ---
-    if len(last_flipped) == 2:
-        sq1, sq2 = last_flipped[0], last_flipped[1]
-        
-        # Ensure both squares are actually in memory and not already matched
-        if sq1 in memory_board and sq2 in memory_board and sq1 not in matched and sq2 not in matched:
-            card1, card2 = memory_board[sq1], memory_board[sq2]
-            
-            # Check for a confident match using the official match criteria
-            if is_match(sq1,card1["mean"], card1["desc"], sq2, card2["mean"], card2["desc"]):
-                log_move("robot_recalled_recent_pair", (sq1, sq2))
-                square_queue.put(sq1)
-                square_queue.put(sq2)
-                last_flipped.clear() # Robot is acting on them, so clear the log
-                return
-
+    seen = set(memory_board.keys())
+    matched = matched_squares
+    
+    # 1. Prepare list of all cards known to the robot AND not yet matched.
     valid_unmatched = [
-        sq for sq in unmatched
-        if memory_board[sq].get("mean") is not None and memory_board[sq].get("desc") is not None
+        sq for sq in seen 
+        if sq not in matched 
+        and memory_board[sq].get("mean") is not None 
+        and memory_board[sq].get("desc") is not None
     ]
 
-    # --- STRATEGY 1: Confident match ---
+    # ----------------------------------------------------------------------
+    # --- STRATEGY 0: Confident Match (Highest Priority) ---
+    # This is the robot's memory in action. It must run first.
+    # ----------------------------------------------------------------------
     for i in range(len(valid_unmatched)):
         for j in range(i + 1, len(valid_unmatched)):
             sq1, sq2 = valid_unmatched[i], valid_unmatched[j]
             card1, card2 = memory_board[sq1], memory_board[sq2]
-            if is_match(sq1,card1["mean"], card1["desc"], sq2, card2["mean"], card2["desc"]):
-                log_move("robot_matched_pair", (sq1, sq2))
-                square_queue.put(sq1)
-                square_queue.put(sq2)
-                return
+            
+            # Use correct 6-argument call
+            if is_match(sq1, card1["mean"], card1["desc"], sq2, card2["mean"], card2["desc"]):
+                log_move("robot_confident_pair_match", (sq1, sq2))
+                
+                # Returns the list of picks for register_card to enqueue
+                return [sq1, sq2] 
 
-    # --- STRATEGY 2: Flip unseen ---
+    # ----------------------------------------------------------------------
+    # --- STRATEGY 1: Flip unseen (Original Strategy 2) ---
+    # ----------------------------------------------------------------------
     unseen = [sq for sq in all_squares if sq not in seen]
     if len(unseen) >= 2:
         a, b = random.sample(unseen, 2)
         log_move("robot_flip_unseen", (a, b))
-        square_queue.put(a)
-        square_queue.put(b)
-        return
+        return [a, b] 
+
     elif len(unseen) == 1:
         a = unseen[0]
         fallback = [sq for sq in all_squares if sq != a and sq not in matched]
         b = random.choice(fallback) if fallback else a
         log_move("robot_flip_unseen_and_fallback", (a, b))
-        square_queue.put(a)
-        square_queue.put(b)
-        return
+        return [a, b] 
 
-    # --- STRATEGY 3: Fallback unmatched ---
+    # ----------------------------------------------------------------------
+    # --- STRATEGY 2: Fallback unmatched (Original Strategy 3) ---
+    # ----------------------------------------------------------------------
     remaining = [sq for sq in all_squares if sq not in matched]
     if len(remaining) >= 2:
         a, b = random.sample(remaining, 2)
         log_move("robot_fallback", (a, b))
-        square_queue.put(a)
-        square_queue.put(b)
-        return
+        return [a, b] 
 
-    # --- STRATEGY 4: Final single ---
+    # ----------------------------------------------------------------------
+    # --- STRATEGY 3: Final single (Original Strategy 4) ---
+    # ----------------------------------------------------------------------
     if len(remaining) == 1:
         log_move("robot_final_single", remaining[0])
-        square_queue.put(remaining[0])
-        square_queue.put(remaining[0])
-        return
+        return [remaining[0], remaining[0]] 
 
-    # --- STRATEGY 5: Idle ---
+    # --- STRATEGY 4: Idle ---
     log_move("robot_idle", None)
-
+    return []
 # ---------------------- HELPERS ----------------------
 def check_match(sq1_id, m1, d1, sq2_id, m2, d2):
     vecs = np.array([m1, m2])
