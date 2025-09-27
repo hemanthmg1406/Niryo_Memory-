@@ -70,7 +70,8 @@ MEMORY_BACK = pygame.image.load("memory.PNG").convert_alpha()
 # --- Layout variables (will be calculated in reset_gui_state) ---
 CELL_W, CELL_H = 0, 0
 GRID_X, GRID_Y = 0, 0
-btn_restart, btn_quit = pygame.Rect(0,0,0,0), pygame.Rect(0,0,0,0)
+# --- MODIFIED: Added btn_back ---
+btn_restart, btn_quit, btn_back = pygame.Rect(0,0,0,0), pygame.Rect(0,0,0,0), pygame.Rect(0,0,0,0)
 grid_rects: Dict[str, pygame.Rect] = {}
 
 # ─────────────── Animation Helper Functions ───────────────
@@ -103,7 +104,8 @@ def reset_gui_state():
     global cell_state, recent_clicks, cell_image, ICON_CACHE, squares_to_flip_back
     global game_phase, winner_message
     global CELL_W, CELL_H, GRID_X, GRID_Y
-    global grid_rects, btn_restart, btn_quit
+    # --- MODIFIED: Added btn_back ---
+    global grid_rects, btn_restart, btn_quit, btn_back
 
     game_phase, winner_message = "playing", ""
     score_human, score_robot, current_turn = 0, 0, "human"
@@ -115,6 +117,9 @@ def reset_gui_state():
     start_typewriter_animation("banner", "Your Turn")
     start_typewriter_animation("score_human", f"{player_name}: {score_human}")
     start_typewriter_animation("score_robot", f"Robot: {score_robot}")
+    # --- NEW: Start typewriter for difficulty ---
+    start_typewriter_animation("difficulty", f"Level: {difficulty.capitalize()}")
+
 
     for sq in ALL_SQUARE_IDS:
         cell_state[sq] = CellState.BACK
@@ -135,7 +140,9 @@ def reset_gui_state():
             rect = pygame.Rect(GRID_X + c*CELL_W, GRID_Y + r*CELL_H, CELL_W, CELL_H)
             grid_rects[lbl] = rect
 
+    # --- MODIFIED: Added btn_back position ---
     btn_restart = pygame.Rect( (SIDEBAR_WIDTH - BTN_W) // 2, WINDOW_H - BTN_H - 100, BTN_W, BTN_H)
+    btn_back = pygame.Rect( (SIDEBAR_WIDTH - BTN_W) // 2, WINDOW_H - BTN_H - 170, BTN_W, BTN_H)
     btn_quit    = pygame.Rect(0,0,0,0)
 
 def hit_test(pos) -> Optional[str]:
@@ -154,6 +161,8 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
     banner_text = animation_states.get("banner", {}).get("visible_text", "")
     sh_text = animation_states.get("score_human", {}).get("visible_text", "")
     sr_text = animation_states.get("score_robot", {}).get("visible_text", "")
+    # --- NEW: Get difficulty text ---
+    diff_text = animation_states.get("difficulty", {}).get("visible_text", "")
 
     title_surf = font_title.render(title_text, True, TEXT_DARK)
     screen.blit(title_surf, ( (SIDEBAR_WIDTH - title_surf.get_width()) // 2, 50) )
@@ -166,6 +175,11 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
     robot_score_surf = font_title.render(sr_text, True, TEXT_DARK)
     screen.blit(human_score_surf, ( (SIDEBAR_WIDTH - human_score_surf.get_width()) // 2, score_y_start) )
     screen.blit(robot_score_surf, ( (SIDEBAR_WIDTH - robot_score_surf.get_width()) // 2, score_y_start + 60) )
+
+    # --- NEW: Display difficulty text ---
+    diff_surf = font_main.render(diff_text, True, TEXT_LIGHT)
+    screen.blit(diff_surf, ( (SIDEBAR_WIDTH - diff_surf.get_width()) // 2, score_y_start + 120) )
+
 
     for lbl, rect in grid_rects.items():
         state = cell_state[lbl]
@@ -193,7 +207,8 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
             if lbl in squares_to_flip_back:
                 pygame.draw.rect(screen, MISMATCH_BORDER, inner_rect, 5, border_radius=8)
 
-    for rect, label in ((btn_restart,"Restart Game"),):
+    # --- MODIFIED: Added "Back" button to loop ---
+    for rect, label in ((btn_restart,"Restart Game"), (btn_back, "Back")):
         is_hovered = rect.collidepoint(mouse_pos)
         btn_color = NIRYO_LIGHT_BLUE if is_hovered else NIRYO_BLUE
         pygame.draw.rect(screen, BUTTON_SHADOW, rect.move(4,4), border_radius=12)
@@ -224,8 +239,8 @@ def show_intro() -> None:
     cursor_visible = True
     last_cursor_toggle = pygame.time.get_ticks()
 
-    difficulty = None
-    while difficulty is None:
+    difficulty_selection = None
+    while difficulty_selection is None:
         mp = pygame.mouse.get_pos()
 
         for ev in pygame.event.get():
@@ -241,9 +256,9 @@ def show_intro() -> None:
                     color = color_active if active else color_inactive
 
                 if name_entered and ev.button == 1:
-                    if btn_easy.collidepoint(mp): difficulty = "easy"
-                    elif btn_med.collidepoint(mp): difficulty = "medium"
-                    elif btn_hard.collidepoint(mp): difficulty = "hard"
+                    if btn_easy.collidepoint(mp): difficulty_selection = "easy"
+                    elif btn_med.collidepoint(mp): difficulty_selection = "medium"
+                    elif btn_hard.collidepoint(mp): difficulty_selection = "hard"
 
             if ev.type == pygame.KEYDOWN:
                 if active:
@@ -296,6 +311,8 @@ def show_intro() -> None:
 
         pygame.display.flip()
         clock.tick(FPS)
+    difficulty = difficulty_selection
+
 
 def shutdown_program():
     screen.fill(BACKGROUND_COLOR)
@@ -358,13 +375,14 @@ def run_gui() -> None:
     # --- MOVED LOGIC ---
     # Show the intro screen at the beginning of the GUI's execution
     show_intro()
+
+
+    hover_lbl = None
+    reset_gui_state()
     # After show_intro(), the global 'difficulty' is set. Now, pass it to the logic thread.
     if difficulty:
         square_queue.put({"event": "set_difficulty", "difficulty": difficulty})
     # --- END MOVED LOGIC ---
-
-    hover_lbl = None
-    reset_gui_state()
     running = True
 
     while running:
@@ -396,6 +414,20 @@ def run_gui() -> None:
                             while True: gui_queue.get_nowait()
                         except queue.Empty: pass
                         square_queue.put("reset_game")
+                    # --- NEW: Handle back button click ---
+                    elif btn_back.collidepoint(mouse_pos):
+                        try:
+                            while True: square_queue.get_nowait()
+                        except queue.Empty: pass
+                        try:
+                            while True: gui_queue.get_nowait()
+                        except queue.Empty: pass
+                        square_queue.put("reset_game")
+                        show_intro()
+                        reset_gui_state()
+                        if difficulty:
+                            square_queue.put({"event": "set_difficulty", "difficulty": difficulty})
+
 
                     elif current_turn == "human" and hover_lbl and len(recent_clicks) < 2:
                         if hover_lbl not in recent_clicks:
