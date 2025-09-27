@@ -14,6 +14,15 @@ MATCH_BORDER = (255, 195, 18)  # Gold for match
 MISMATCH_BORDER = (220, 80, 80) # Red for mismatch
 BUTTON_SHADOW = (200, 200, 200)
 
+# --- NEW: Added new button colors ---
+BTN_EASY_COLOR = (46, 204, 113)      # Green
+BTN_EASY_HOVER = (88, 214, 141)
+BTN_MEDIUM_COLOR = (241, 196, 15)    # Yellow
+BTN_MEDIUM_HOVER = (244, 208, 63)
+BTN_HARD_COLOR = (155, 89, 182)      # Purple
+BTN_HARD_HOVER = (175, 122, 197)
+
+
 # ─────────────── 2. New Dashboard-Style Layout ───────────────
 WINDOW_W, WINDOW_H = 1280, 800
 SIDEBAR_WIDTH = 320 # Space for the dashboard
@@ -70,7 +79,6 @@ MEMORY_BACK = pygame.image.load("memory.PNG").convert_alpha()
 # --- Layout variables (will be calculated in reset_gui_state) ---
 CELL_W, CELL_H = 0, 0
 GRID_X, GRID_Y = 0, 0
-# --- MODIFIED: Added btn_back ---
 btn_restart, btn_quit, btn_back = pygame.Rect(0,0,0,0), pygame.Rect(0,0,0,0), pygame.Rect(0,0,0,0)
 grid_rects: Dict[str, pygame.Rect] = {}
 
@@ -104,7 +112,6 @@ def reset_gui_state():
     global cell_state, recent_clicks, cell_image, ICON_CACHE, squares_to_flip_back
     global game_phase, winner_message
     global CELL_W, CELL_H, GRID_X, GRID_Y
-    # --- MODIFIED: Added btn_back ---
     global grid_rects, btn_restart, btn_quit, btn_back
 
     game_phase, winner_message = "playing", ""
@@ -117,7 +124,6 @@ def reset_gui_state():
     start_typewriter_animation("banner", "Your Turn")
     start_typewriter_animation("score_human", f"{player_name}: {score_human}")
     start_typewriter_animation("score_robot", f"Robot: {score_robot}")
-    # --- NEW: Start typewriter for difficulty ---
     start_typewriter_animation("difficulty", f"Level: {difficulty.capitalize()}")
 
 
@@ -140,7 +146,6 @@ def reset_gui_state():
             rect = pygame.Rect(GRID_X + c*CELL_W, GRID_Y + r*CELL_H, CELL_W, CELL_H)
             grid_rects[lbl] = rect
 
-    # --- MODIFIED: Added btn_back position ---
     btn_restart = pygame.Rect( (SIDEBAR_WIDTH - BTN_W) // 2, WINDOW_H - BTN_H - 100, BTN_W, BTN_H)
     btn_back = pygame.Rect( (SIDEBAR_WIDTH - BTN_W) // 2, WINDOW_H - BTN_H - 170, BTN_W, BTN_H)
     btn_quit    = pygame.Rect(0,0,0,0)
@@ -161,7 +166,6 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
     banner_text = animation_states.get("banner", {}).get("visible_text", "")
     sh_text = animation_states.get("score_human", {}).get("visible_text", "")
     sr_text = animation_states.get("score_robot", {}).get("visible_text", "")
-    # --- NEW: Get difficulty text ---
     diff_text = animation_states.get("difficulty", {}).get("visible_text", "")
 
     title_surf = font_title.render(title_text, True, TEXT_DARK)
@@ -176,7 +180,6 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
     screen.blit(human_score_surf, ( (SIDEBAR_WIDTH - human_score_surf.get_width()) // 2, score_y_start) )
     screen.blit(robot_score_surf, ( (SIDEBAR_WIDTH - robot_score_surf.get_width()) // 2, score_y_start + 60) )
 
-    # --- NEW: Display difficulty text ---
     diff_surf = font_main.render(diff_text, True, TEXT_LIGHT)
     screen.blit(diff_surf, ( (SIDEBAR_WIDTH - diff_surf.get_width()) // 2, score_y_start + 120) )
 
@@ -207,7 +210,6 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
             if lbl in squares_to_flip_back:
                 pygame.draw.rect(screen, MISMATCH_BORDER, inner_rect, 5, border_radius=8)
 
-    # --- MODIFIED: Added "Back" button to loop ---
     for rect, label in ((btn_restart,"Restart Game"), (btn_back, "Back")):
         is_hovered = rect.collidepoint(mouse_pos)
         btn_color = NIRYO_LIGHT_BLUE if is_hovered else NIRYO_BLUE
@@ -301,13 +303,24 @@ def show_intro() -> None:
             if active and cursor_visible:
                 cursor_rect = pygame.Rect(input_box.x + 18 + text_surface.get_width(), input_box.y + 10, 3, 30)
                 pygame.draw.rect(screen, TEXT_DARK, cursor_rect)
-
+        
+        # --- MODIFIED: This is the new button drawing logic with custom colors ---
         if name_entered:
-            for btn, label in ((btn_easy, "Easy"), (btn_med, "Medium"), (btn_hard, "Hard")):
-                clr = NIRYO_LIGHT_BLUE if btn.collidepoint(mp) else NIRYO_BLUE
-                pygame.draw.rect(screen, clr, btn, border_radius=8)
-                txt = font_main.render(label, True, (255, 255, 255))
+            button_configs = [
+                (btn_easy, "Easy", BTN_EASY_COLOR, BTN_EASY_HOVER),
+                (btn_med, "Medium", BTN_MEDIUM_COLOR, BTN_MEDIUM_HOVER),
+                (btn_hard, "Hard", BTN_HARD_COLOR, BTN_HARD_HOVER)
+            ]
+
+            for btn, label, base_color, hover_color in button_configs:
+                clr = hover_color if btn.collidepoint(mp) else base_color
+                pygame.draw.rect(screen, BUTTON_SHADOW, btn.move(4, 4), border_radius=12)
+                pygame.draw.rect(screen, clr, btn, border_radius=12)
+                # Use dark text for the yellow button for better readability
+                text_color = TEXT_DARK if label == "Medium" else (255, 255, 255)
+                txt = font_main.render(label, True, text_color)
                 screen.blit(txt, txt.get_rect(center=btn.center))
+
 
         pygame.display.flip()
         clock.tick(FPS)
@@ -372,7 +385,6 @@ def handle_robot_msg(msg: dict) -> None:
 def run_gui() -> None:
     global recent_clicks, game_phase, difficulty
 
-    # --- MOVED LOGIC ---
     # Show the intro screen at the beginning of the GUI's execution
     show_intro()
 
@@ -382,7 +394,6 @@ def run_gui() -> None:
     # After show_intro(), the global 'difficulty' is set. Now, pass it to the logic thread.
     if difficulty:
         square_queue.put({"event": "set_difficulty", "difficulty": difficulty})
-    # --- END MOVED LOGIC ---
     running = True
 
     while running:
@@ -414,7 +425,6 @@ def run_gui() -> None:
                             while True: gui_queue.get_nowait()
                         except queue.Empty: pass
                         square_queue.put("reset_game")
-                    # --- NEW: Handle back button click ---
                     elif btn_back.collidepoint(mouse_pos):
                         try:
                             while True: square_queue.get_nowait()

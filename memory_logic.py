@@ -6,6 +6,14 @@ from sklearn.decomposition import PCA
 from memory_queues import gui_queue, square_queue
 from sift_utils import compute_knn_match_score
 from user_feedback import play_sound
+from config import (
+    MATCH_DISTANCE_THRESHOLD,
+    MATCH_KNN_SCORE_THRESHOLD,
+    PCA_DIMS,
+    DIFFICULTY_DEFAULT
+)
+
+DIFFICULTY = DIFFICULTY_DEFAULT
 
 # ---------------------- GAME STATE ----------------------
 memory_board    = {}          # square_id: {mean, desc, matched}
@@ -26,10 +34,7 @@ score_human = 0
 score_robot = 0
 
 # ---------------------- CONFIG ----------------------
-PCA_DIMS                  = 3
-MATCH_DISTANCE_THRESHOLD  = 0.4
-MATCH_KNN_SCORE_THRESHOLD = 0.5
-DIFFICULTY = "hard"  # Default to hard
+
 
 # ---------------------- MAIN API ----------------------
 import sys, queue # Ensure queue is imported at the top of memory_logic.py

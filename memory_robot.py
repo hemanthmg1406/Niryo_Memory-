@@ -5,14 +5,14 @@ import numpy as np
 from memory_queues import square_queue, gui_queue
 from memory_logic import register_card, reset_game
 from sift_utils import *
-from recorded_positions import pick_positions, drop_positions, home_pose, scan_pose, CARD_BOX
+from recorded_positions import pick_positions, drop_positions, home_pose, scan_pose
 from pyniryo2 import NiryoRobot, NiryoRos, Vision
-
+from config import ROBOT_IP_ADDRESS, STABLE_WAIT_TIME, CARD_BOX
 import pyniryo
 
 # -------------------- Robot Setup --------------------
-robot_ip_address = "169.254.200.200"
-robot = NiryoRobot(robot_ip_address)
+
+robot = NiryoRobot(ROBOT_IP_ADDRESS)
 robot.arm.calibrate_auto()
 robot.tool.release_with_tool()    # ensure vacuum off
 robot.arm.move_pose(home_pose)
@@ -20,7 +20,7 @@ robot.arm.move_pose(home_pose)
 image_save_dir = "scanned_cards"
 os.makedirs(image_save_dir, exist_ok=True)
 
-stable_wait_time = 2.0  # seconds card must stay stable
+
 
 def is_at_scan_pose(current, target, tol=0.1):
     # only compare X,Y,Z
@@ -88,7 +88,7 @@ def scan_card_image(square_id, max_scan_retries=3):
                 if last_center and np.linalg.norm(np.array(center) - np.array(last_center)) < 10:
                     if stable_since is None:
                         stable_since = t
-                    elif not detection_time and (t - stable_since) >= stable_wait_time:
+                    elif not detection_time and (t - stable_since) >= STABLE_WAIT_TIME:
                         detection_time = t
                 else:
                     stable_since = None
