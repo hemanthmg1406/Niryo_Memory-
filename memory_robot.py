@@ -45,7 +45,7 @@ def scan_card_image(square_id):
     print(f"[SCAN] Looking for card at {square_id}")
     last_center = stable_since = detection_time = None
     last_box_debug = 0
-    start_time = time.time() 
+    start_time = time.time()
     while True:
         try:
             # Step 1: Get image from Niryo camera
@@ -65,7 +65,7 @@ def scan_card_image(square_id):
                 camera_info.intrinsics,
                 camera_info.distortion
             )
-          
+
             # Step 2: Resize and mask
             try:
                 frame_resized = cv2.resize(img, (640, 480))
@@ -74,20 +74,12 @@ def scan_card_image(square_id):
                 return None
 
             masked = mask_outside_card(frame_resized, CARD_BOX)
-            #if masked is None or masked.size == 0:
-            #    print("[ERROR] Masked image is invalid.")
-            #    continue
 
             disp, box = draw_oriented_bounding_box(masked.copy())
 
-            # Step 3: Safe image preview or fallback
-            # send preview images to GUI thread
-            
-            
             cv2.imwrite("debug_preview.jpg", frame_resized)
             cv2.imwrite("debug_masked.jpg", masked)
 
-            
             # Step 4: Stability tracking
             t = time.time()
             if box is not None and box.shape == (4, 2):
@@ -102,7 +94,6 @@ def scan_card_image(square_id):
                 last_center = center
 
                 if detection_time and (t - detection_time) >= 1:
-                    # capture & warp perspective
                     snap = masked.copy()
                     pts = box.astype('float32')
                     w = int(max(np.linalg.norm(pts[0] - pts[1]), np.linalg.norm(pts[2] - pts[3])))
@@ -127,12 +118,12 @@ def scan_card_image(square_id):
                             break
 
                         print(f"[WARN] No features found for {square_id}. Retrying scan... (attempt {retry_count+1})")
-                        
+
                         time.sleep(0.7)
-                        
+
                         retry_count += 1
                     if mean_vec is None:
-                        print("[FatAL ERROR] Failed to extract features after retries.")
+                        print("[FATAL ERROR] Failed to extract features after retries.")
                         return None
 
                     # Step 6: Save & register
@@ -142,7 +133,6 @@ def scan_card_image(square_id):
                     print(f"[ROBOT] Captured {square_id} → {filepath}")
 
                     result = register_card(square_id, mean_vec, descriptors, filepath, debug=True)
-                    #print(f"[ROBOT] register_card → {result}")
 
                     gui_queue.put({
                         "status": "reveal",
@@ -157,9 +147,8 @@ def scan_card_image(square_id):
                     print("[DEBUG] No valid bounding box found.")
                     last_box_debug = now
 
-                    # if total time exceeds 10 seconds → give up
                 if now - start_time > 15.0:
-                    print("[ERROR] Timed out: Could not detect a valid bounding box in 10 seconds.")                        
+                    print("[ERROR] Timed out: Could not detect a valid bounding box in 10 seconds.")
                     return None
 
         except Exception as e:
@@ -177,12 +166,29 @@ def main_loop():
                 time.sleep(0.05)
                 continue
 
-            square_id = square_queue.get()
+            queue_item = square_queue.get()
+
+            # --- THIS IS THE FIX ---
+            # Check if the item from the queue is the difficulty setting dictionary
+            if isinstance(queue_item, dict):
+                if queue_item.get("event") == "set_difficulty":
+                    # Forward the dictionary to memory_logic to handle it
+                    register_card(queue_item, None, None, None)
+                    continue # Skip the rest of the loop and wait for a real square_id
+                else:
+                    # Handle other potential dictionary messages if you add them later
+                    print(f"[ROBOT] Received unknown dictionary message: {queue_item}")
+                    continue
+            
+            # If it's not a dictionary, it must be a square_id string
+            square_id = queue_item
+            # --- END OF FIX ---
+
             if square_id == "reset_game":
                 print("[ROBOT] Received reset command.")
-                reset_game()  # Call the reset function from memory_logic
-                continue 
-            
+                reset_game()
+                continue
+
             print(f"[ROBOT] Received square: {square_id}")
             pick_pose = pick_positions.get(square_id)
             drop_pose = drop_positions.get(square_id)
@@ -191,13 +197,11 @@ def main_loop():
                 print(f"[ERROR] Missing pose for {square_id}")
                 continue
 
-                    # ---- PICK ----
+            # ---- PICK ----
             print(f"[MOVE] Preparing to pick {square_id}")
-            # If the card is in row D, approach via its drop pose first
             if square_id.startswith('D'):
                 print(f"[MOVE] Approaching row D. Moving to drop pose for {square_id} first.")
                 robot.arm.move_pose(drop_pose)
-            # Now, move to the final pick position
             print(f"[MOVE] Moving to pick pose for {square_id}")
             robot.arm.move_pose(pick_pose)
             robot.tool.grasp_with_tool()
@@ -217,14 +221,12 @@ def main_loop():
             robot.arm.move_pose(drop_pose)
             robot.tool.release_with_tool()
             print(f"[DROP] Released at {square_id}")
-            #time.sleep(0.3)
 
             gui_queue.put({
                 "status": "dropped",
                 "square": square_id
             })
 
-            # return home
             robot.arm.move_pose(home_pose)
 
     except KeyboardInterrupt:

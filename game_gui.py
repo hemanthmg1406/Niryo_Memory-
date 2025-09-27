@@ -35,6 +35,7 @@ ICON_CACHE: Dict[str, pygame.Surface] = {}
 score_human, score_robot = 0, 0
 current_turn = "human"
 recent_clicks: List[str] = []
+difficulty = "hard" # Global variable for difficulty
 
 # --- Typewriter Animation State ---
 animation_states = {}
@@ -87,12 +88,10 @@ def update_typewriter_animations():
     now = pygame.time.get_ticks()
     for state in animation_states.values():
         full_text = state['full_text']
-        # Update visible characters if animation is not complete
         if state['visible_chars'] < len(full_text):
             if now - state['last_update'] > TYPEWRITER_SPEED:
                 state['visible_chars'] += 1
                 state['last_update'] = now
-        # Update the visible text string
         state['visible_text'] = full_text[:state['visible_chars']]
 
 # ─────────────── Helper Functions ───────────────
@@ -111,7 +110,6 @@ def reset_gui_state():
     cell_image.clear()
     squares_to_flip_back.clear()
 
-    # Initialize animations for all text elements
     start_typewriter_animation("title", "Niryo Memory")
     start_typewriter_animation("banner", "Your Turn")
     start_typewriter_animation("score_human", f"Human: {score_human}")
@@ -120,16 +118,15 @@ def reset_gui_state():
     for sq in ALL_SQUARE_IDS:
         cell_state[sq] = CellState.BACK
 
-    # --- New Layout Calculation for Dashboard ---
     grid_area_w = WINDOW_W - SIDEBAR_WIDTH - (GRID_PADDING * 2)
     grid_area_h = WINDOW_H - (GRID_PADDING * 2)
 
     cell_side = min(grid_area_w // COLS, grid_area_h // ROWS)
     CELL_W = CELL_H = cell_side
-    
+
     grid_w = COLS * CELL_W
     grid_h = ROWS * CELL_H
-    
+
     GRID_X = SIDEBAR_WIDTH + GRID_PADDING + (grid_area_w - grid_w) // 2
     GRID_Y = GRID_PADDING + (grid_area_h - grid_h) // 2
 
@@ -143,8 +140,7 @@ def reset_gui_state():
                 CELL_W, CELL_H
             )
             grid_rects[lbl] = rect
-    
-    # ─────────────── 5. Enhanced Buttons (Positioning) ───────────────
+
     btn_restart = pygame.Rect( (SIDEBAR_WIDTH - BTN_W) // 2, WINDOW_H - BTN_H - 100, BTN_W, BTN_H)
     btn_quit    = pygame.Rect(0,0,0,0)
 
@@ -156,33 +152,27 @@ def hit_test(pos) -> Optional[str]:
 def draw_board(hover_lbl: Optional[str], mouse_pos):
     screen.fill(BACKGROUND_COLOR)
 
-    # --- Draw Sidebar / Dashboard ---
     sidebar_rect = pygame.Rect(0, 0, SIDEBAR_WIDTH, WINDOW_H)
     pygame.draw.rect(screen, (255, 255, 255), sidebar_rect)
     pygame.draw.line(screen, (220, 220, 220), (SIDEBAR_WIDTH, 0), (SIDEBAR_WIDTH, WINDOW_H), 2)
 
-    # Safely get animated text, providing a default if not ready
     title_text = animation_states.get("title", {}).get("visible_text", "")
     banner_text = animation_states.get("banner", {}).get("visible_text", "")
     sh_text = animation_states.get("score_human", {}).get("visible_text", "")
     sr_text = animation_states.get("score_robot", {}).get("visible_text", "")
 
-    # Title
     title_surf = font_title.render(title_text, True, TEXT_DARK)
     screen.blit(title_surf, ( (SIDEBAR_WIDTH - title_surf.get_width()) // 2, 40) )
-    
-    # Turn Indicator
+
     banner_surf = font_banner.render(banner_text, True, NIRYO_BLUE)
     screen.blit(banner_surf, ( (SIDEBAR_WIDTH - banner_surf.get_width()) // 2, 120) )
-    
-    # Scores
+
     score_y_start = 250
     human_score_surf = font_title.render(sh_text, True, TEXT_DARK)
     robot_score_surf = font_title.render(sr_text, True, TEXT_DARK)
     screen.blit(human_score_surf, ( (SIDEBAR_WIDTH - human_score_surf.get_width()) // 2, score_y_start) )
     screen.blit(robot_score_surf, ( (SIDEBAR_WIDTH - robot_score_surf.get_width()) // 2, score_y_start + 50) )
 
-    # --- Draw Grid Cells ---
     for lbl, rect in grid_rects.items():
         state = cell_state[lbl]
         inner_rect = rect.inflate(-12, -12)
@@ -204,20 +194,19 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
             if img:
                 img_rect = img.get_rect(center=inner_rect.center)
                 screen.blit(img, img_rect)
-            
+
             if state == CellState.MATCHED:
                 pygame.draw.rect(screen, MATCH_BORDER, inner_rect, 5, border_radius=8)
             if lbl in squares_to_flip_back:
                 pygame.draw.rect(screen, MISMATCH_BORDER, inner_rect, 5, border_radius=8)
 
-    # --- 5. Enhanced Buttons (Drawing) ---
     for rect, label in ((btn_restart,"Restart Game"),):
         is_hovered = rect.collidepoint(mouse_pos)
         btn_color = NIRYO_LIGHT_BLUE if is_hovered else NIRYO_BLUE
-        
+
         pygame.draw.rect(screen, BUTTON_SHADOW, rect.move(4,4), border_radius=12)
         pygame.draw.rect(screen, btn_color, rect, border_radius=12)
-        
+
         text_surf = font_main.render(label, True, (255,255,255))
         text_rect = text_surf.get_rect(center=rect.center)
         screen.blit(text_surf, text_rect)
@@ -227,16 +216,15 @@ def show_intro() -> None:
     btn_easy = pygame.Rect(WINDOW_W//2-300, WINDOW_H//2-25, 200,50)
     btn_med  = pygame.Rect(WINDOW_W//2- 50, WINDOW_H//2-25, 200,50)
     btn_hard = pygame.Rect(WINDOW_W//2+200, WINDOW_H//2-25, 200,50)
-    
+
     title_full_text = "Welcome to Memory Match"
     inst_full_text = "Select difficulty and start!"
     title_visible_chars = 0
     inst_visible_chars = 0
     last_update = pygame.time.get_ticks()
-    
+
     difficulty=None
     while difficulty is None:
-        # Animation logic for intro screen
         now = pygame.time.get_ticks()
         if now - last_update > 40:
             if title_visible_chars < len(title_full_text):
@@ -244,10 +232,10 @@ def show_intro() -> None:
             elif inst_visible_chars < len(inst_full_text):
                 inst_visible_chars += 1
             last_update = now
-            
+
         title_visible_text = title_full_text[:title_visible_chars]
         inst_visible_text = inst_full_text[:inst_visible_chars]
-        
+
         title_s = font_banner.render(title_visible_text,True,NIRYO_BLUE)
         inst_s  = font_title.render(inst_visible_text,True,TEXT_DARK)
 
@@ -259,11 +247,11 @@ def show_intro() -> None:
                 if btn_easy.collidepoint(mp): difficulty="easy"
                 elif btn_med.collidepoint(mp): difficulty="medium"
                 elif btn_hard.collidepoint(mp): difficulty="hard"
-        
+
         screen.fill(BACKGROUND_COLOR)
         screen.blit(title_s, ( (WINDOW_W - title_s.get_width())//2, WINDOW_H//3-60) )
         screen.blit(inst_s, ( (WINDOW_W - inst_s.get_width())//2, WINDOW_H//3) )
-        
+
         for btn,label in ((btn_easy,"Easy"),(btn_med,"Medium"),(btn_hard,"Hard")):
             clr = NIRYO_LIGHT_BLUE if btn.collidepoint(mp) else NIRYO_BLUE
             pygame.draw.rect(screen, clr, btn, border_radius=8)
@@ -326,7 +314,16 @@ def handle_robot_msg(msg: dict) -> None:
         winner_message = f"{msg['winner']} wins! {msg['human_score']}–{msg['robot_score']}"
 
 def run_gui() -> None:
-    global recent_clicks, game_phase
+    global recent_clicks, game_phase, difficulty
+
+    # --- MOVED LOGIC ---
+    # Show the intro screen at the beginning of the GUI's execution
+    show_intro()
+    # After show_intro(), the global 'difficulty' is set. Now, pass it to the logic thread.
+    if difficulty:
+        square_queue.put({"event": "set_difficulty", "difficulty": difficulty})
+    # --- END MOVED LOGIC ---
+
     hover_lbl = None
     reset_gui_state()
     running = True
@@ -338,7 +335,7 @@ def run_gui() -> None:
             while True: handle_robot_msg(gui_queue.get_nowait())
         except queue.Empty:
             pass
-            
+
         mouse_pos = pygame.mouse.get_pos()
         new_hover = hit_test(mouse_pos)
         if new_hover != hover_lbl:
@@ -371,7 +368,7 @@ def run_gui() -> None:
                         cell_state[sq] = CellState.BACK
                     squares_to_flip_back.clear()
                     recent_clicks.clear()
-            
+
             elif game_phase == "game_over":
                 if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
                     if btn_restart.collidepoint(mouse_pos):
@@ -385,14 +382,13 @@ def run_gui() -> None:
 
         draw_board(hover_lbl, mouse_pos)
         if game_phase == "game_over":
-            # Start winner message animation if it hasn't been started for this message
             if "winner_msg" not in animation_states or animation_states["winner_msg"]['full_text'] != winner_message:
                  start_typewriter_animation("winner_msg", winner_message)
 
             overlay = pygame.Surface((WINDOW_W, WINDOW_H), pygame.SRCALPHA)
             overlay.fill((255, 255, 255, 200))
             screen.blit(overlay, (0,0))
-            
+
             winner_text = animation_states.get("winner_msg", {}).get("visible_text", "")
             wm_surf = font_banner.render(winner_text, True, TEXT_DARK)
             wm_rect = wm_surf.get_rect(center=(WINDOW_W / 2, WINDOW_H / 2 - 50))
@@ -400,9 +396,9 @@ def run_gui() -> None:
 
         pygame.display.flip()
         clock.tick(FPS)
-        
+
     shutdown_program()
 
 if __name__=="__main__":
-    show_intro()
+    # This block is now only used for running this file directly for testing
     run_gui()
