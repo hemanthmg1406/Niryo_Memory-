@@ -137,7 +137,18 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
         gui_queue.put({"event": "score", "human_score": score_human, "robot_score": score_robot})
         print(f"[LOGIC] Pair matched: {sq1}, {square_id} → +1 {current_turn}")
         log_move("match", (sq1, square_id))
-        advance_to_next_turn()
+        if is_game_over():
+            winner = "Human" if score_human > score_robot else "Robot" if score_robot > score_human else "Tie"
+            gui_queue.put({
+                "event": "game_over",
+                "winner": winner,
+                "human_score": score_human,
+                "robot_score": score_robot
+            })
+            print(f"[LOGIC] GAME OVER: {winner} wins!")
+        else:
+            # Continue same turn (only if game is NOT over)
+            advance_to_next_turn()
     else:
         if current_turn == "human": play_sound("wrong_match_human")
         else: play_sound("wrong_match_robot")
