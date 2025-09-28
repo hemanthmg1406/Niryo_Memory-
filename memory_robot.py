@@ -9,6 +9,7 @@ from recorded_positions import pick_positions, drop_positions, home_pose, scan_p
 from pyniryo2 import NiryoRobot, NiryoRos, Vision
 from config import ROBOT_IP_ADDRESS, STABLE_WAIT_TIME, CARD_BOX
 import pyniryo
+from user_feedback import play_sound # <-- IMPORT ADDED
 
 # -------------------- Robot Setup --------------------
 
@@ -256,6 +257,7 @@ def main_loop():
             robot.arm.move_pose(drop_pose)
             robot.tool.release_with_tool()
             print(f"[DROP] Released at {square_id}")
+            play_sound("placing") # <-- SOUND ADDED
 
             gui_queue.put({
                 "status": "dropped",

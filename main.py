@@ -33,6 +33,8 @@ if __name__ == "__main__":
     try:
         multiprocessing.set_start_method("spawn")
     except RuntimeError:
-        pass  # Already set
+        # This will raise if the start method has already been set, which is fine.
+        pass
 
     main()
+    

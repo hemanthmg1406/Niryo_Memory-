@@ -1,10 +1,10 @@
-
 import os
 import random
 import time
-from pyniryo import NiryoRobot
+# This is the corrected import statement
+from pyniryo2 import NiryoRobot
 
-# Connect to Niryo robot
+# Connect to Niryo robot using the pyniryo2 library
 robot = NiryoRobot("169.254.200.200")
 
 # Path to your main sound folder
@@ -12,24 +12,43 @@ SOUND_ROOT = "sounds"
 
 # Main function to play one random sound from a folder + LED effect
 def play_sound(category):
+    """
+    Plays a random .wav file from the specified category folder.
+    The category can now be a path like 'level/easy' or a filename like 'intro'.
+    """
+    # os.path.join handles creating the correct path (e.g., "sounds/level/easy")
     folder_path = os.path.join(SOUND_ROOT, category)
-    if not os.path.isdir(folder_path):
-        print(f"[SFX] Invalid category: {category}")
-        return
 
-    # Get all .wav files in the given folder
-    wav_files = [f for f in os.listdir(folder_path) if f.endswith(".wav")]
-    if not wav_files:
-        print(f"[SFX] No sounds found in: {category}")
-        return
+    # First, check if the provided path is a directory
+    if os.path.isdir(folder_path):
+        # Get all .wav files in the given folder
+        wav_files = [f for f in os.listdir(folder_path) if f.endswith(".wav")]
+        if not wav_files:
+            print(f"[SFX] No sounds found in: {category}")
+            return
 
-    # Choose and play a random sound
-    chosen = random.choice(wav_files)
-    try:
-        robot.sound.play(chosen, wait_end=True)
-        print(f"[SFX] Played: {category}/{chosen}")
-    except Exception as e:
-        print(f"[SFX] Error playing sound: {e}")
+        # Choose and play a random sound from the list
+        chosen_file = random.choice(wav_files)
+        try:
+            # Now that 'robot' is from pyniryo2, this .sound attribute will exist
+            robot.sound.play(chosen_file, wait_end=True)
+            print(f"[SFX] Played: {category}/{chosen_file}")
+        except Exception as e:
+            print(f"[SFX] Error playing sound from category '{category}': {e}")
+            return
+
+    # If not a directory, check if it's a direct file reference (e.g., "intro")
+    else:
+        filepath = f"{folder_path}.wav"
+        if os.path.isfile(filepath):
+            sound_name = os.path.basename(filepath)
+            try:
+                robot.sound.play(sound_name, wait_end=True)
+                print(f"[SFX] Played: {sound_name}")
+            except Exception as e:
+                print(f"[SFX] Error playing sound file '{sound_name}': {e}")
+        else:
+            print(f"[SFX] Invalid category or file path: {category}")
         return
 
     # LED effects per category
@@ -53,4 +72,3 @@ def play_sound(category):
 
     except Exception as e:
         print(f"[SFX] LED error: {e}")
-

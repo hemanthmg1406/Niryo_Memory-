@@ -2,6 +2,7 @@ import sys, queue, pygame
 from enum import Enum, auto
 from typing import Dict, List, Optional
 from memory_queues import square_queue, gui_queue
+from user_feedback import play_sound # <-- IMPORT ADDED
 
 # ─────────────── 1. New Color Palette & Theme ───────────────
 NIRYO_BLUE = (0, 150, 214)
@@ -242,6 +243,8 @@ def show_intro() -> None:
     last_cursor_toggle = pygame.time.get_ticks()
 
     difficulty_selection = None
+    play_select_level_sound = True # <-- ADDED FLAG
+
     while difficulty_selection is None:
         mp = pygame.mouse.get_pos()
 
@@ -258,9 +261,15 @@ def show_intro() -> None:
                     color = color_active if active else color_inactive
 
                 if name_entered and ev.button == 1:
-                    if btn_easy.collidepoint(mp): difficulty_selection = "easy"
-                    elif btn_med.collidepoint(mp): difficulty_selection = "medium"
-                    elif btn_hard.collidepoint(mp): difficulty_selection = "hard"
+                    if btn_easy.collidepoint(mp):
+                        difficulty_selection = "easy"
+                        play_sound("level/easy") # <-- SOUND ADDED
+                    elif btn_med.collidepoint(mp):
+                        difficulty_selection = "medium"
+                        play_sound("level/medium") # <-- SOUND ADDED
+                    elif btn_hard.collidepoint(mp):
+                        difficulty_selection = "hard"
+                        play_sound("level/hard") # <-- SOUND ADDED
 
             if ev.type == pygame.KEYDOWN:
                 if active:
@@ -270,6 +279,10 @@ def show_intro() -> None:
                             name_entered = True
                             active = False
                             instruction_text = f"Hello {player_name}, select difficulty:"
+                            # --- PLAY SOUND WHEN DIFFICULTY BUTTONS APPEAR ---
+                            if play_select_level_sound:
+                                play_sound("selectlevel") # <-- SOUND ADDED
+                                play_select_level_sound = False
                     elif ev.key == pygame.K_BACKSPACE:
                         user_name = user_name[:-1]
                     else:
@@ -386,6 +399,7 @@ def run_gui() -> None:
     global recent_clicks, game_phase, difficulty
 
     # Show the intro screen at the beginning of the GUI's execution
+    play_sound("intro") # <-- SOUND ADDED
     show_intro()
 
 
@@ -441,6 +455,7 @@ def run_gui() -> None:
 
                     elif current_turn == "human" and hover_lbl and len(recent_clicks) < 2:
                         if hover_lbl not in recent_clicks:
+                            play_sound("picking") # <-- SOUND ADDED
                             square_queue.put(hover_lbl)
                             recent_clicks.append(hover_lbl)
 
