@@ -3,17 +3,23 @@ import time
 import random
 import threading
 from sklearn.decomposition import PCA
+import sys, queue
+from pyniryo2 import NiryoRobot
 from memory_queues import gui_queue, square_queue
 from sift_utils import compute_knn_match_score
 from user_feedback import play_sound
+from robot_interface import set_robot_led
 from config import (
     MATCH_DISTANCE_THRESHOLD,
     MATCH_KNN_SCORE_THRESHOLD,
     PCA_DIMS,
-    DIFFICULTY_DEFAULT
+    DIFFICULTY_DEFAULT, ROBOT_IP_ADDRESS
 )
 
 DIFFICULTY = DIFFICULTY_DEFAULT
+
+robot=NiryoRobot(ROBOT_IP_ADDRESS)
+
 
 # ---------------------- GAME STATE ----------------------
 memory_board    = {}          # square_id: {mean, desc, matched}
@@ -33,11 +39,9 @@ current_turn    = "human"
 score_human = 0
 score_robot = 0
 
-# ---------------------- CONFIG ----------------------
-
 
 # ---------------------- MAIN API ----------------------
-import sys, queue # Ensure queue is imported at the top of memory_logic.py
+ # Ensure queue is imported at the top of memory_logic.py
 
 def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
     global memory_board, turn_state, matched_squares, current_turn, last_flipped
@@ -136,8 +140,13 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
         matched_squares.update([sq1, square_id])
         memory_board[sq1]["matched"]       = True
         memory_board[square_id]["matched"] = True
-        if current_turn == "human": score_human += 1
-        else: score_robot += 1
+        if current_turn == "human":
+            score_human += 1
+            set_robot_led(robot,"MATCH_HUMAN")
+        else: 
+            score_robot += 1
+            set_robot_led(robot,"MATCH_ROBOT")
+        time.sleep(1.0) # Pause to let user see the match LED
         gui_queue.put({"status":  "matched", "squares": [sq1, square_id]})
         gui_queue.put({"event": "score", "human_score": score_human, "robot_score": score_robot})
         print(f"[LOGIC] Pair matched: {sq1}, {square_id} → +1 {current_turn}")
@@ -155,8 +164,13 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
             # Continue same turn (only if game is NOT over)
             advance_to_next_turn()
     else:
-        if current_turn == "human": play_sound("wrong_match_human")
-        else: play_sound("wrong_match_robot")
+        if current_turn == "human": 
+            play_sound("wrong_match_human")
+            set_robot_led(robot,"MISMATCH_HUMAN")
+        else: 
+            play_sound("wrong_match_robot")
+            set_robot_led(robot,"MISMATCH_ROBOT")
+        time.sleep(1.0) # Pause to let user see the mismatch LED
         gui_queue.put({"status":  "flip_back", "squares": [sq1, square_id]})
         print(f"[LOGIC] No match → FLIP_BACK {sq1},{square_id}")
         log_move("mismatch", (sq1, square_id))
@@ -287,7 +301,7 @@ def advance_to_next_turn():
         for sq in picks:
             square_queue.put(sq)
 
-def reset_game():
+def reset_game(play_turn_sound=True): # <-- CHANGE #1: Add the argument
     global memory_board, matched_squares, current_turn, last_flipped, game_history
     global score_human, score_robot
     memory_board.clear()
@@ -300,7 +314,8 @@ def reset_game():
     score_robot = 0
     gui_queue.put({"status":"reset"})
     gui_queue.put({"event":"turn","player":"human"})
-    play_sound("human_turn")
+    if play_turn_sound: # <-- CHANGE #2: Add this 'if' condition
+        play_sound("human_turn")
 
 def get_turn():
     return current_turn

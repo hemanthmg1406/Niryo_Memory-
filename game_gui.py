@@ -2,7 +2,7 @@ import sys, queue, pygame
 from enum import Enum, auto
 from typing import Dict, List, Optional
 from memory_queues import square_queue, gui_queue
-from user_feedback import play_sound # <-- IMPORT ADDED
+from user_feedback import play_sound
 
 # ─────────────── 1. New Color Palette & Theme ───────────────
 NIRYO_BLUE = (0, 150, 214)
@@ -56,6 +56,8 @@ TYPEWRITER_SPEED = 50  # Milliseconds per character
 game_phase = "playing"
 winner_message = ""
 FLIP_BACK_EVENT = pygame.USEREVENT + 1
+INTRO_SOUND_EVENT = pygame.USEREVENT + 2
+SELECT_LEVEL_SOUND_EVENT = pygame.USEREVENT + 3
 squares_to_flip_back: List[str] = []
 
 # ─────────────── Pygame Setup ───────────────
@@ -233,6 +235,9 @@ def show_intro() -> None:
     btn_easy = pygame.Rect(WINDOW_W//2-350, WINDOW_H//2+50, 200, 50)
     btn_med  = pygame.Rect(WINDOW_W//2-100, WINDOW_H//2+50, 200, 50)
     btn_hard = pygame.Rect(WINDOW_W//2+150, WINDOW_H//2+50, 200, 50)
+    
+    btn_place_cards = pygame.Rect(WINDOW_W//2 - 225, WINDOW_H//2 + 120, 200, 50)
+    btn_collect_cards = pygame.Rect(WINDOW_W//2 + 25, WINDOW_H//2 + 120, 200, 50)
 
     title_full_text = "Welcome to Memory Match"
     instruction_text = "Enter your name:"
@@ -243,14 +248,34 @@ def show_intro() -> None:
     last_cursor_toggle = pygame.time.get_ticks()
 
     difficulty_selection = None
-    play_select_level_sound = True # <-- ADDED FLAG
-
+    play_select_level_sound = True
+    
     while difficulty_selection is None:
         mp = pygame.mouse.get_pos()
+
+        # --- NEW: Logic to change cursor on button hover ---
+        if name_entered:
+            is_hovering_button = (
+                btn_easy.collidepoint(mp) or
+                btn_med.collidepoint(mp) or
+                btn_hard.collidepoint(mp) or
+                btn_place_cards.collidepoint(mp) or
+                btn_collect_cards.collidepoint(mp)
+            )
+            pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND if is_hovering_button else pygame.SYSTEM_CURSOR_ARROW)
+        else:
+            pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
+        # ---------------------------------------------------
 
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT:
                 shutdown_program()
+
+            if ev.type == INTRO_SOUND_EVENT:
+                play_sound("intro")
+            
+            if ev.type == SELECT_LEVEL_SOUND_EVENT:
+                play_sound("selectlevel")
 
             if ev.type == pygame.MOUSEBUTTONDOWN:
                 if not name_entered:
@@ -261,27 +286,32 @@ def show_intro() -> None:
                     color = color_active if active else color_inactive
 
                 if name_entered and ev.button == 1:
-                    if btn_easy.collidepoint(mp):
+                    if btn_place_cards.collidepoint(mp):
+                        print("[GUI] Place Cards button clicked. Sending command...")
+                        square_queue.put({"event": "place_cards"})
+                    elif btn_collect_cards.collidepoint(mp):
+                        print("[GUI] Collect Cards button clicked. Sending command...")
+                        square_queue.put({"event": "collect_cards"})
+                    elif btn_easy.collidepoint(mp):
                         difficulty_selection = "easy"
-                        play_sound("level/easy") # <-- SOUND ADDED
+                        play_sound("level/easy")
                     elif btn_med.collidepoint(mp):
                         difficulty_selection = "medium"
-                        play_sound("level/medium") # <-- SOUND ADDED
+                        play_sound("level/medium")
                     elif btn_hard.collidepoint(mp):
                         difficulty_selection = "hard"
-                        play_sound("level/hard") # <-- SOUND ADDED
+                        play_sound("level/hard")
 
             if ev.type == pygame.KEYDOWN:
                 if active:
                     if ev.key == pygame.K_RETURN:
                         if user_name:
-                            player_name = user_name.capitalize() # Capitalize the name
+                            player_name = user_name.capitalize()
                             name_entered = True
                             active = False
-                            instruction_text = f"Hello {player_name}, select difficulty:"
-                            # --- PLAY SOUND WHEN DIFFICULTY BUTTONS APPEAR ---
+                            instruction_text = f"Hello {player_name}, select difficulty or setup board:"
                             if play_select_level_sound:
-                                play_sound("selectlevel") # <-- SOUND ADDED
+                                pygame.time.set_timer(SELECT_LEVEL_SOUND_EVENT, 200, loops=1)
                                 play_select_level_sound = False
                     elif ev.key == pygame.K_BACKSPACE:
                         user_name = user_name[:-1]
@@ -317,23 +347,30 @@ def show_intro() -> None:
                 cursor_rect = pygame.Rect(input_box.x + 18 + text_surface.get_width(), input_box.y + 10, 3, 30)
                 pygame.draw.rect(screen, TEXT_DARK, cursor_rect)
         
-        # --- MODIFIED: This is the new button drawing logic with custom colors ---
         if name_entered:
             button_configs = [
                 (btn_easy, "Easy", BTN_EASY_COLOR, BTN_EASY_HOVER),
                 (btn_med, "Medium", BTN_MEDIUM_COLOR, BTN_MEDIUM_HOVER),
                 (btn_hard, "Hard", BTN_HARD_COLOR, BTN_HARD_HOVER)
             ]
-
             for btn, label, base_color, hover_color in button_configs:
                 clr = hover_color if btn.collidepoint(mp) else base_color
                 pygame.draw.rect(screen, BUTTON_SHADOW, btn.move(4, 4), border_radius=12)
                 pygame.draw.rect(screen, clr, btn, border_radius=12)
-                # Use dark text for the yellow button for better readability
                 text_color = TEXT_DARK if label == "Medium" else (255, 255, 255)
                 txt = font_main.render(label, True, text_color)
                 screen.blit(txt, txt.get_rect(center=btn.center))
-
+            
+            utility_buttons = [
+                (btn_place_cards, "Place Cards"),
+                (btn_collect_cards, "Collect Cards")
+            ]
+            for btn, label in utility_buttons:
+                clr = NIRYO_LIGHT_BLUE if btn.collidepoint(mp) else NIRYO_BLUE
+                pygame.draw.rect(screen, BUTTON_SHADOW, btn.move(4,4), border_radius=12)
+                pygame.draw.rect(screen, clr, btn, border_radius=12)
+                txt = font_main.render(label, True, (255, 255, 255))
+                screen.blit(txt, txt.get_rect(center=btn.center))
 
         pygame.display.flip()
         clock.tick(FPS)
@@ -398,14 +435,12 @@ def handle_robot_msg(msg: dict) -> None:
 def run_gui() -> None:
     global recent_clicks, game_phase, difficulty
 
-    # Show the intro screen at the beginning of the GUI's execution
-    play_sound("intro") # <-- SOUND ADDED
+    pygame.time.set_timer(INTRO_SOUND_EVENT, 500, loops=1)
     show_intro()
 
 
     hover_lbl = None
     reset_gui_state()
-    # After show_intro(), the global 'difficulty' is set. Now, pass it to the logic thread.
     if difficulty:
         square_queue.put({"event": "set_difficulty", "difficulty": difficulty})
     running = True
@@ -438,7 +473,8 @@ def run_gui() -> None:
                         try:
                             while True: gui_queue.get_nowait()
                         except queue.Empty: pass
-                        square_queue.put("reset_game")
+                        # CHANGE: Send dictionary to play sound
+                        square_queue.put({"event": "reset_game", "play_sound": True})
                     elif btn_back.collidepoint(mouse_pos):
                         try:
                             while True: square_queue.get_nowait()
@@ -446,7 +482,9 @@ def run_gui() -> None:
                         try:
                             while True: gui_queue.get_nowait()
                         except queue.Empty: pass
-                        square_queue.put("reset_game")
+                        # CHANGE: Send dictionary to NOT play sound
+                        square_queue.put({"event": "reset_game", "play_sound": False})
+                        play_sound("intro")
                         show_intro()
                         reset_gui_state()
                         if difficulty:
@@ -455,7 +493,7 @@ def run_gui() -> None:
 
                     elif current_turn == "human" and hover_lbl and len(recent_clicks) < 2:
                         if hover_lbl not in recent_clicks:
-                            play_sound("picking") # <-- SOUND ADDED
+                            play_sound("picking")
                             square_queue.put(hover_lbl)
                             recent_clicks.append(hover_lbl)
 
@@ -496,5 +534,4 @@ def run_gui() -> None:
     shutdown_program()
 
 if __name__=="__main__":
-    # This block is now only used for running this file directly for testing
     run_gui()

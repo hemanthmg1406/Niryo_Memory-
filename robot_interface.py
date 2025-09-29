@@ -25,28 +25,28 @@ def set_robot_led(robot, state: str):
     elif state == "MATCH_ROBOT":
         # When robot makes a match - Chase Green
         # Assuming 'snake' can be adapted for a chase effect, similar to the original 'snake' example.
-        robot.led_ring.snake(COLOR_GREEN, period=0.08, iterations=3, wait=True)
+        robot.led_ring.snake(COLOR_GREEN, period=0.1, iterations=3, wait=True)
         robot.led_ring.turn_off()
         
     elif state == "MISMATCH_ROBOT":
         # When robot makes a mismatch - Solid Red (Flash is clearer for error)
-        robot.led_ring.flash(COLOR_RED, period=0.3, iterations=3, wait=True) 
+        robot.led_ring.flash(COLOR_RED, period=0.5, iterations=3, wait=True) 
         robot.led_ring.turn_off()
 
     elif state == "MATCH_HUMAN":
         # When opponent makes a match - Snake Green
-        robot.led_ring.snake(COLOR_GREEN, period=0.08, iterations=3, wait=True)
+        robot.led_ring.snake(COLOR_GREEN, period=0.1, iterations=3, wait=True)
         robot.led_ring.turn_off()
         
     elif state == "MISMATCH_HUMAN":
         # When opponent makes a mismatch - Solid Red (Flash is clearer for error)
-        robot.led_ring.flash(COLOR_RED, period=0.3, iterations=3, wait=True)
+        robot.led_ring.flash(COLOR_RED, period=0.5, iterations=3, wait=True)
         robot.led_ring.turn_off()
         
     # --- Critical Failure States (Need clear, distinct signals) ---
     elif state == "SCAN_FAIL":
         # Scan failure - Fast Blinking Red/Magenta
-        robot.led_ring.flash([255, 0, 255], period=0.15, iterations=5, wait=True) # Magenta flash
+        robot.led_ring.flash([255, 0, 255], period=0.35, iterations=5, wait=True) # Magenta flash
         robot.led_ring.turn_off()
         
     elif state == "HOME":

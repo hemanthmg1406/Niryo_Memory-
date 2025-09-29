@@ -9,13 +9,15 @@ from recorded_positions import pick_positions, drop_positions, home_pose, scan_p
 from pyniryo2 import NiryoRobot, NiryoRos, Vision
 from config import ROBOT_IP_ADDRESS, STABLE_WAIT_TIME, CARD_BOX
 import pyniryo
-from user_feedback import play_sound # <-- IMPORT ADDED
+from user_feedback import play_sound
+# --- NEW: Import the utility functions ---
+from stackandunstack import collect_cards_to_stacks, place_initial_cards
 
 # -------------------- Robot Setup --------------------
 
 robot = NiryoRobot(ROBOT_IP_ADDRESS)
 robot.arm.calibrate_auto()
-robot.tool.release_with_tool()    # ensure vacuum off
+robot.tool.release_with_tool()
 robot.arm.move_pose(home_pose)
 
 image_save_dir = "scanned_cards"
@@ -24,12 +26,10 @@ os.makedirs(image_save_dir, exist_ok=True)
 
 
 def is_at_scan_pose(current, target, tol=0.1):
-    # only compare X,Y,Z
     return all(abs(c - t) < tol for c, t in zip(current[:3], target[:3]))
 
 # -------------------- Card Scanning --------------------
 def scan_card_image(square_id, max_scan_retries=3):
-    # 1) Verify pose
     current_pose = [round(v, 2) for v in robot.arm.get_pose().to_list()]
     target_pose = [round(v, 2) for v in scan_pose]
     print(f"[DEBUG] Current pose")
@@ -39,7 +39,6 @@ def scan_card_image(square_id, max_scan_retries=3):
         print("[SKIP] Not at scan pose.")
         return None
 
-    # 2) Init camera
     ros_instance = NiryoRos("169.254.200.200")
     vision = Vision(ros_instance)
 
@@ -48,10 +47,8 @@ def scan_card_image(square_id, max_scan_retries=3):
     last_box_debug = 0
     start_time = time.time()
     
-    # Run loop indefinitely until success or timeout (The timeout will handle the overall 15s)
     while True:
         try:
-            # Step 1: Get image from Niryo camera (remains the same)
             img_compressed = vision.get_img_compressed()
             if img_compressed is None:
                 print("[ERROR] Could not get compressed image.")
@@ -69,7 +66,6 @@ def scan_card_image(square_id, max_scan_retries=3):
                 camera_info.distortion
             )
           
-            # Step 2: Resize and mask (remains the same)
             try:
                 frame_resized = cv2.resize(img, (640, 480))
             except Exception as e:
@@ -82,7 +78,6 @@ def scan_card_image(square_id, max_scan_retries=3):
             cv2.imwrite("debug_preview.jpg", frame_resized)
             cv2.imwrite("debug_masked.jpg", masked)
 
-            # Step 4: Stability tracking (remains the same)
             t = time.time()
             if box is not None and box.shape == (4, 2):
                 center = tuple(np.mean(box, axis=0).astype(int))
@@ -96,7 +91,6 @@ def scan_card_image(square_id, max_scan_retries=3):
                 last_center = center
 
                 if detection_time and (t - detection_time) >= 1:
-                    # Capture & warp perspective (remains the same)
                     snap = masked.copy()
                     pts = box.astype('float32')
                     w = int(max(np.linalg.norm(pts[0] - pts[1]), np.linalg.norm(pts[2] - pts[3])))
@@ -113,24 +107,20 @@ def scan_card_image(square_id, max_scan_retries=3):
                     card = auto_crop_inside_white_edges(card)
                     cv2.destroyAllWindows()
 
-                    # --- MODIFIED STEP 5: Feature extraction with limited retries ---
                     retry_count = 0
-                    while retry_count < max_scan_retries: # Use the new argument here
+                    while retry_count < max_scan_retries:
                         mean_vec, descriptors = extract_sift_signature(card)
                         if mean_vec is not None and descriptors is not None:
-                            break # Success!
+                            break
 
                         print(f"[WARN] No features found for {square_id}. Retrying scan... (attempt {retry_count+1}/{max_scan_retries})")
                         time.sleep(0.7)
                         retry_count += 1
                     
                     if mean_vec is None:
-                        # Fail the inner scan, but do NOT send a FATAL ERROR yet.
-                        # Return None so the main_loop can handle the physical retry.
                         print(f"[FAIL] Failed to extract features after {max_scan_retries} software retries.")
                         return None 
 
-                    # Step 6: Save & register (SUCCESS PATH)
                     filename = f"{square_id}.jpg"
                     filepath = os.path.join(image_save_dir, filename)
                     cv2.imwrite(filepath, card)
@@ -143,15 +133,13 @@ def scan_card_image(square_id, max_scan_retries=3):
                         "square": square_id,
                         "image_path": filepath
                     })
-                    return result # Return the result on success!
+                    return result
             else:
-                # No valid bounding box found
                 now = time.time()
                 if now - last_box_debug > 3.0:
                     print("[DEBUG] No valid bounding box found.")
                     last_box_debug = now
 
-                # The total time limit remains for stability/detection
                 if now - start_time > 15.0:
                     print("[ERROR] Timed out: Could not detect a valid bounding box in 15 seconds.")
                     return None
@@ -173,23 +161,62 @@ def main_loop():
 
             queue_item = square_queue.get()
 
-            # --- HANDLE DICTIONARY MESSAGES (Difficulty Setting) ---
+            # --- UPDATED: Expanded to handle new utility commands ---
             if isinstance(queue_item, dict):
-                if queue_item.get("event") == "set_difficulty":
-                    # Forward the dictionary to memory_logic to handle it
-                    register_card(queue_item, None, None, None) 
+                event = queue_item.get("event")
+                if event == "set_difficulty":
+                    register_card(queue_item, None, None, None)
+                elif event == "collect_cards":
+                    print("[ROBOT] Received 'collect_cards' command. Executing...")
+                    collect_cards_to_stacks(robot)
+                    print("[ROBOT] Card collection finished.")
+                elif event == "place_cards":
+                    print("[ROBOT] Received 'place_cards' command. Executing...")
+                    place_initial_cards(robot)
+                    print("[ROBOT] Card placement finished.")
                 else:
                     print(f"[ROBOT] Received unknown dictionary message: {queue_item}")
-                continue # Skip the rest of the loop and wait for a real square_id or next command
+                continue
             
             square_id = queue_item
             
-            # --- HANDLE RESET COMMAND ---
-            if square_id == "reset_game":
-                print("[ROBOT] Received reset command.")
-                # Assumes reset_game() handles logic-side cleanup and GUI notification
-                reset_game() 
+            # --- UPDATED: HANDLE DICTIONARY MESSAGES (Difficulty, Reset, etc.) ---
+            if isinstance(queue_item, dict):
+                event = queue_item.get("event")
+                if event == "set_difficulty":
+                    register_card(queue_item, None, None, None)
+                elif event == "reset_game":
+                    # Get the flag from the message, default to True if not found
+                    play_sound_flag = queue_item.get("play_sound", True)
+                    print(f"[ROBOT] Received reset command (Play Sound: {play_sound_flag}).")
+                    reset_game(play_turn_sound=play_sound_flag)
+                elif event == "collect_cards":
+                    print("[ROBOT] Received 'collect_cards' command. Executing...")
+                    collect_cards_to_stacks(robot)
+                    print("[ROBOT] Card collection finished.")
+                elif event == "place_cards":
+                    print("[ROBOT] Received 'place_cards' command. Executing...")
+                    place_initial_cards(robot)
+                    print("[ROBOT] Card placement finished.")
+                else:
+                    print(f"[ROBOT] Received unknown dictionary message: {queue_item}")
                 continue
+            
+            # This handles the old string-based reset command if it's still sent from somewhere
+            if queue_item == "reset_game":
+                print("[ROBOT] Received legacy reset command.")
+                reset_game(play_turn_sound=True) 
+                continue
+
+            square_id = queue_item
+            
+            # --- HANDLE LEGACY RESET COMMAND (optional fallback) ---
+            if queue_item == "reset_game":
+                print("[ROBOT] Received legacy reset command.")
+                reset_game(play_turn_sound=True) 
+                continue
+
+            square_id = queue_item
 
             print(f"[ROBOT] Received square: {square_id}")
             pick_pose = pick_positions.get(square_id)
@@ -199,72 +226,54 @@ def main_loop():
                 print(f"[ERROR] Missing pose for {square_id}")
                 continue
 
-            # --- START: PHYSICAL RESET RETRY LOGIC (The Fix) ---
             result = None
-            total_attempt_cycles = 2 # Two sets of attempts (Attempt 1: Initial, Attempt 2: Repick & Scan)
+            total_attempt_cycles = 2
             
             for attempt_cycle in range(total_attempt_cycles):
-                
-                # 1. PICK (Always re-pick or pick for the first time)
                 if attempt_cycle == 0:
-                    # Initial pick sequence
                     print(f"[MOVE] Preparing to pick {square_id} (Cycle {attempt_cycle+1})")
                     if square_id.startswith('D'):
                         print(f"[MOVE] Approaching row D. Moving to drop pose for {square_id} first.")
                         robot.arm.move_pose(drop_pose)
                     robot.arm.move_pose(pick_pose)
                     robot.tool.grasp_with_tool()
-                    robot.arm.move_pose(drop_pose) # Move up to safe height
+                    robot.arm.move_pose(drop_pose)
 
                 elif attempt_cycle == 1:
-                    # Repick sequence after first failure
                     print(f"[MOVE] Repicking {square_id} for second chance.")
-                    robot.tool.release_with_tool() # Release the card back to the board
-                    time.sleep(1.0) # Wait for card to settle
+                    robot.tool.release_with_tool()
+                    time.sleep(1.0)
                     
-                    robot.arm.move_pose(pick_pose) # Move down and grasp again
+                    robot.arm.move_pose(pick_pose)
                     robot.tool.grasp_with_tool()
-                    robot.arm.move_pose(drop_pose) # Move up to safe height
+                    robot.arm.move_pose(drop_pose)
 
-                # 2. MOVE → SCAN
                 print(f"[MOVE] Going to scan pose")
                 robot.arm.move_pose(scan_pose)
 
-                # 3. SCAN (Call scan_card_image, which must be modified to run 3 attempts)
-                # NOTE: scan_card_image must be modified elsewhere to take max_scan_retries=3
                 result = scan_card_image(square_id) 
 
                 if result is not None:
-                    break # Success! Exit the retry loop
-
-            # --- END: PHYSICAL RESET RETRY LOGIC ---
+                    break
 
             if result is None:
-                # Total failure after both cycles (2 repicks total)
                 print(f"[WARN] Failed to scan {square_id} after all attempts. Signaling scan failure.")
-                
-                # CRITICAL: Send FAILURE SIGNAL to GUI/Logic to reset the human's turn
                 gui_queue.put({"status": "scan_fail", "square": square_id})
-                
-                # Safely release the card (if still grasped) and return home
                 robot.tool.release_with_tool()
                 robot.arm.move_pose(home_pose)
-                continue # Go to the next loop iteration (wait for new pick)
+                continue
 
-
-            # ---- DROP (Only executes on successful scan) ----
+            play_sound("placing")
             robot.arm.move_pose(home_pose)
             robot.arm.move_pose(drop_pose)
             robot.tool.release_with_tool()
             print(f"[DROP] Released at {square_id}")
-            play_sound("placing") # <-- SOUND ADDED
 
             gui_queue.put({
                 "status": "dropped",
                 "square": square_id
             })
 
-            # return home
             robot.arm.move_pose(home_pose)
 
     except KeyboardInterrupt:

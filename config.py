@@ -6,7 +6,7 @@ GRIPPER_TOOL_ID  = 1    # ID for the vacuum gripper (or custom tool)
 ROWS, COLS       = 4, 5
 ALL_SQUARE_IDS   = [r + c for r in "ABCD" for c in "12345"]
 # CARD_BOX defines the region of interest (ROI) in the camera feed (x, y, w, h)
-CARD_BOX         = (190, 105, 270, 270)  
+CARD_BOX         = (270, 140, 190, 190)  
 
 # --- COMPUTER VISION CONFIG ---
 PCA_DIMS                  = 3

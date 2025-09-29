@@ -31,7 +31,7 @@ def play_sound(category):
         chosen_file = random.choice(wav_files)
         try:
             # Now that 'robot' is from pyniryo2, this .sound attribute will exist
-            robot.sound.play(chosen_file, wait_end=True)
+            robot.sound.play(chosen_file, wait_end=False)
             print(f"[SFX] Played: {category}/{chosen_file}")
         except Exception as e:
             print(f"[SFX] Error playing sound from category '{category}': {e}")
@@ -43,7 +43,7 @@ def play_sound(category):
         if os.path.isfile(filepath):
             sound_name = os.path.basename(filepath)
             try:
-                robot.sound.play(sound_name, wait_end=True)
+                robot.sound.play(sound_name, wait_end=False)
                 print(f"[SFX] Played: {sound_name}")
             except Exception as e:
                 print(f"[SFX] Error playing sound file '{sound_name}': {e}")
@@ -54,21 +54,21 @@ def play_sound(category):
     # LED effects per category
     try:
         if category == "robot_win":
-            robot.led_ring.breath([0, 0, 255], iterations=5, wait=True)  # Blue breath
+            robot.led_ring.breath([0, 0, 255], iterations=5, wait=False)  # Blue breath
         elif category == "robot_turn":
-            robot.led_ring.snake([0, 255, 255], period=0.08, iterations=3, wait=True)  # Aqua snake
+            robot.led_ring.snake([0, 255, 255], period=0.08, iterations=3, wait=False)  # Aqua snake
         elif category == "human_turn":
-            robot.led_ring.go_up_and_down([255, 255, 0], iterations=2, wait=True)  # Yellow wave
+            robot.led_ring.go_up_and_down([255, 255, 0], iterations=2, wait=False)  # Yellow wave
         elif category == "wrong_match_human":
-            robot.led_ring.flash([255, 0, 0], period=0.3, iterations=3, wait=True)  # Red flash
+            robot.led_ring.flash([255, 0, 0], period=0.3, iterations=3, wait=False)  # Red flash
         elif category == "correct_match_human":
             robot.led_ring.solid([0, 255, 0])
             time.sleep(1)
             robot.led_ring.turn_off()
         elif category == "human_win":
-            robot.led_ring.rainbow_cycle(iterations=3, wait=True)  # Rainbow finish
+            robot.led_ring.rainbow_cycle(iterations=3, wait=False)  # Rainbow finish
         else:
-            robot.led_ring.rainbow(iterations=1, wait=True)  # fallback effect
+            robot.led_ring.rainbow(iterations=1, wait=False)  # fallback effect
 
     except Exception as e:
         print(f"[SFX] LED error: {e}")
