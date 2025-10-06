@@ -47,6 +47,7 @@ current_turn = "human"
 recent_clicks: List[str] = []
 player_name = "Player" # Default name
 difficulty = "hard" # Global variable for difficulty
+audio_profile = "adult"
 
 # --- Typewriter Animation State ---
 animation_states = {}
@@ -62,6 +63,7 @@ squares_to_flip_back: List[str] = []
 
 # ─────────────── Pygame Setup ───────────────
 pygame.init()
+pygame.mixer.init()
 screen = pygame.display.set_mode((WINDOW_W, WINDOW_H))
 pygame.display.set_caption("Niryo Memory Match – GUI")
 clock = pygame.time.Clock()
@@ -223,7 +225,7 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
         screen.blit(text_surf, text_rect)
 
 def show_intro() -> None:
-    global difficulty, player_name
+    global difficulty, player_name, audio_profile  # Add audio_profile here
     user_name = ""
     input_box = pygame.Rect(WINDOW_W // 2 - 150, WINDOW_H // 3 + 80, 300, 50)
     color_inactive = NIRYO_BLUE
@@ -231,11 +233,16 @@ def show_intro() -> None:
     color = color_inactive
     active = False
     name_entered = False
+    profile_selected = False  # New state to track if a profile has been selected
+
+    # --- Buttons ---
+    btn_adult = pygame.Rect(WINDOW_W // 2 - 225, WINDOW_H // 2 + 50, 200, 50)
+    btn_kid = pygame.Rect(WINDOW_W // 2 + 25, WINDOW_H // 2 + 50, 200, 50)
 
     btn_easy = pygame.Rect(WINDOW_W//2-350, WINDOW_H//2+50, 200, 50)
     btn_med  = pygame.Rect(WINDOW_W//2-100, WINDOW_H//2+50, 200, 50)
     btn_hard = pygame.Rect(WINDOW_W//2+150, WINDOW_H//2+50, 200, 50)
-    
+
     btn_place_cards = pygame.Rect(WINDOW_W//2 - 225, WINDOW_H//2 + 120, 200, 50)
     btn_collect_cards = pygame.Rect(WINDOW_W//2 + 25, WINDOW_H//2 + 120, 200, 50)
 
@@ -249,23 +256,16 @@ def show_intro() -> None:
 
     difficulty_selection = None
     play_select_level_sound = True
-    
+
     while difficulty_selection is None:
         mp = pygame.mouse.get_pos()
 
-        # --- NEW: Logic to change cursor on button hover ---
-        if name_entered:
-            is_hovering_button = (
-                btn_easy.collidepoint(mp) or
-                btn_med.collidepoint(mp) or
-                btn_hard.collidepoint(mp) or
-                btn_place_cards.collidepoint(mp) or
-                btn_collect_cards.collidepoint(mp)
-            )
-            pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND if is_hovering_button else pygame.SYSTEM_CURSOR_ARROW)
-        else:
-            pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
-        # ---------------------------------------------------
+        is_hovering_button = (
+            (name_entered and not profile_selected and (btn_adult.collidepoint(mp) or btn_kid.collidepoint(mp))) or
+            (profile_selected and (btn_easy.collidepoint(mp) or btn_med.collidepoint(mp) or btn_hard.collidepoint(mp) or
+                                   btn_place_cards.collidepoint(mp) or btn_collect_cards.collidepoint(mp)))
+        )
+        pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND if is_hovering_button else pygame.SYSTEM_CURSOR_ARROW)
 
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT:
@@ -273,7 +273,7 @@ def show_intro() -> None:
 
             if ev.type == INTRO_SOUND_EVENT:
                 play_sound("intro")
-            
+
             if ev.type == SELECT_LEVEL_SOUND_EVENT:
                 play_sound("selectlevel")
 
@@ -284,8 +284,16 @@ def show_intro() -> None:
                     else:
                         active = False
                     color = color_active if active else color_inactive
-
-                if name_entered and ev.button == 1:
+                elif not profile_selected:
+                    if btn_adult.collidepoint(mp):
+                        audio_profile = "adult"
+                        profile_selected = True
+                        instruction_text = f"Hello {player_name}, select difficulty or setup board:"
+                    elif btn_kid.collidepoint(mp):
+                        audio_profile = "kid"
+                        profile_selected = True
+                        instruction_text = f"Hello {player_name}, select difficulty or setup board:"
+                elif ev.button == 1:
                     if btn_place_cards.collidepoint(mp):
                         print("[GUI] Place Cards button clicked. Sending command...")
                         square_queue.put({"event": "place_cards"})
@@ -294,13 +302,14 @@ def show_intro() -> None:
                         square_queue.put({"event": "collect_cards"})
                     elif btn_easy.collidepoint(mp):
                         difficulty_selection = "easy"
-                        play_sound("level/easy")
+                        play_sound(f"level/easy_{audio_profile}")
                     elif btn_med.collidepoint(mp):
                         difficulty_selection = "medium"
-                        play_sound("level/medium")
+                        play_sound(f"level/medium_{audio_profile}")
                     elif btn_hard.collidepoint(mp):
                         difficulty_selection = "hard"
-                        play_sound("level/hard")
+                        play_sound(f"level/hard_{audio_profile}")
+
 
             if ev.type == pygame.KEYDOWN:
                 if active:
@@ -309,7 +318,7 @@ def show_intro() -> None:
                             player_name = user_name.capitalize()
                             name_entered = True
                             active = False
-                            instruction_text = f"Hello {player_name}, select difficulty or setup board:"
+                            instruction_text = "Are you an adult or a kid?"
                             if play_select_level_sound:
                                 pygame.time.set_timer(SELECT_LEVEL_SOUND_EVENT, 200, loops=1)
                                 play_select_level_sound = False
@@ -346,8 +355,16 @@ def show_intro() -> None:
             if active and cursor_visible:
                 cursor_rect = pygame.Rect(input_box.x + 18 + text_surface.get_width(), input_box.y + 10, 3, 30)
                 pygame.draw.rect(screen, TEXT_DARK, cursor_rect)
-        
-        if name_entered:
+        elif not profile_selected:
+            # Show Adult/Kid buttons
+            for btn, label in ((btn_adult, "Adult"), (btn_kid, "Kid")):
+                clr = NIRYO_LIGHT_BLUE if btn.collidepoint(mp) else NIRYO_BLUE
+                pygame.draw.rect(screen, BUTTON_SHADOW, btn.move(4, 4), border_radius=12)
+                pygame.draw.rect(screen, clr, btn, border_radius=12)
+                txt = font_main.render(label, True, (255, 255, 255))
+                screen.blit(txt, txt.get_rect(center=btn.center))
+        else:
+            # Show difficulty and utility buttons
             button_configs = [
                 (btn_easy, "Easy", BTN_EASY_COLOR, BTN_EASY_HOVER),
                 (btn_med, "Medium", BTN_MEDIUM_COLOR, BTN_MEDIUM_HOVER),
@@ -360,7 +377,7 @@ def show_intro() -> None:
                 text_color = TEXT_DARK if label == "Medium" else (255, 255, 255)
                 txt = font_main.render(label, True, text_color)
                 screen.blit(txt, txt.get_rect(center=btn.center))
-            
+
             utility_buttons = [
                 (btn_place_cards, "Place Cards"),
                 (btn_collect_cards, "Collect Cards")

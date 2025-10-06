@@ -5,50 +5,52 @@ import time
 robot=NiryoRobot(ROBOT_IP_ADDRESS)
 
 def set_robot_led(robot, state: str):
-   
+    
     # Define colors as RGB lists (R, G, B)
     COLOR_RED = [255, 0, 0]
     COLOR_GREEN = [0, 255, 0]
     COLOR_BLUE = [0, 0, 255]
-    COLOR_PURPLE = [128, 0, 128] # Custom RGB for Purple
+    COLOR_PURPLE = [128, 0, 128] 
+    COLOR_MAGENTA = [255, 0, 255] # For SCAN_FAIL
     
     # --- State: Robot is Planning/Waiting ---
     if state == "PLANNING":
-        # While robot is planning its move - Breath Purple
-        robot.led_ring.breath(COLOR_PURPLE, iterations=5, wait=False)
+        # Required: Alternate Purple. Using fast pulse/flash as the closest active state.
+        robot.led_ring.flash(COLOR_PURPLE, period=0.35, iterations=0, wait=False) 
 
     elif state == "WAITING":
-        # While robot is waiting for opponent (Human's Turn) - Breath Blue
-        robot.led_ring.breath(COLOR_BLUE, iterations=0, wait=False) # Continuous breath
+        # Required: Breath Blue.
+        robot.led_ring.breath(COLOR_BLUE, iterations=0, wait=False) 
 
     # --- State: Match/Mismatch Outcomes ---
     elif state == "MATCH_ROBOT":
-        # When robot makes a match - Chase Green
-        # Assuming 'snake' can be adapted for a chase effect, similar to the original 'snake' example.
-        robot.led_ring.snake(COLOR_GREEN, period=0.1, iterations=3, wait=True)
+        # Required: Chase Green. Using faster snake pattern (0.05s) for a chase effect.
+        robot.led_ring.snake(COLOR_GREEN, period=0.25, iterations=5, wait=True)
         robot.led_ring.turn_off()
         
     elif state == "MISMATCH_ROBOT":
-        # When robot makes a mismatch - Solid Red (Flash is clearer for error)
-        robot.led_ring.flash(COLOR_RED, period=0.5, iterations=3, wait=True) 
+        # Required: Solid Red.
+        robot.led_ring.solid(COLOR_RED)
+        time.sleep(2.0)
         robot.led_ring.turn_off()
 
     elif state == "MATCH_HUMAN":
-        # When opponent makes a match - Snake Green
-        robot.led_ring.snake(COLOR_GREEN, period=0.1, iterations=3, wait=True)
+        # Required: Snake Green.
+        robot.led_ring.snake(COLOR_GREEN, period=0.3, iterations= 4, wait=True)
         robot.led_ring.turn_off()
         
     elif state == "MISMATCH_HUMAN":
-        # When opponent makes a mismatch - Solid Red (Flash is clearer for error)
-        robot.led_ring.flash(COLOR_RED, period=0.5, iterations=3, wait=True)
+        # Required: Solid Red.
+        robot.led_ring.solid(COLOR_RED)
+        time.sleep(2.0)
         robot.led_ring.turn_off()
         
-    # --- Critical Failure States (Need clear, distinct signals) ---
+    # --- Critical Failure States ---
     elif state == "SCAN_FAIL":
-        # Scan failure - Fast Blinking Red/Magenta
-        robot.led_ring.flash([255, 0, 255], period=0.35, iterations=5, wait=True) # Magenta flash
+        # Fast Blinking Magenta
+        robot.led_ring.flash(COLOR_MAGENTA, period=0.35, iterations=5, wait=True) 
         robot.led_ring.turn_off()
         
     elif state == "HOME":
-        # Default state (turn off or simple solid color)
-        robot.led_ring.solid(COLOR_BLUE) # Simple solid blue
+        # Default state
+        robot.led_ring.solid(COLOR_BLUE)

@@ -15,7 +15,9 @@ from config import (
     PCA_DIMS,
     DIFFICULTY_DEFAULT, ROBOT_IP_ADDRESS
 )
+from card_categories import CARD_CATEGORY_DATA, IDENTIFICATION_DISTANCE_THRESHOLD
 
+# ---------------------- GLOBALS ----------------------
 DIFFICULTY = DIFFICULTY_DEFAULT
 
 robot=NiryoRobot(ROBOT_IP_ADDRESS)
@@ -153,6 +155,13 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
         log_move("match", (sq1, square_id))
         if is_game_over():
             winner = "Human" if score_human > score_robot else "Robot" if score_robot > score_human else "Tie"
+            #sounds
+            if winner == "Human":
+                play_sound("human_win")
+            else:
+                play_sound("robot_win")
+                
+            #end of sounds
             gui_queue.put({
                 "event": "game_over",
                 "winner": winner,
@@ -246,6 +255,36 @@ def robot_play(debug=False):
     # --- STRATEGY 4: Idle ---
     log_move("robot_idle", None)
     return []
+
+
+def get_card_category(mean_vec_current):
+    """
+    Identifies the category of the scanned card using Euclidean distance 
+    against master mean vectors.
+    Returns: ("Category Name", "sentence", "audio_path") or (None, None, None)
+    """
+    best_match_category = None
+    min_distance = float('inf')
+
+    # Calculate distance to every master category
+    for category, data in CARD_CATEGORY_DATA.items():
+        mean_master = np.array(data["mean_vec"])
+        mean_current = np.array(mean_vec_current)
+
+        # Use NumPy's linalg.norm for Euclidean distance
+        distance = np.linalg.norm(mean_master - mean_current)
+
+        if distance < min_distance:
+            min_distance = distance
+            best_match_category = category
+
+    # Check if the best match is below the confidence threshold
+    if min_distance <= IDENTIFICATION_DISTANCE_THRESHOLD:
+        data = CARD_CATEGORY_DATA[best_match_category]
+        return best_match_category, data["sentence"], data["audio"]
+    else:
+        print(f"[IDENTIFY] Failed to confidently identify card. Min distance: {min_distance:.4f}")
+        return None, None, None
 
 # ---------------------- HELPERS ----------------------
 def check_match(sq1_id, m1, d1, sq2_id, m2, d2):

@@ -3,7 +3,7 @@ import os
 import time
 import numpy as np
 from memory_queues import square_queue, gui_queue
-from memory_logic import register_card, reset_game
+from memory_logic import register_card, reset_game,get_card_category
 from sift_utils import *
 from recorded_positions import pick_positions, drop_positions, home_pose, scan_pose
 from pyniryo2 import NiryoRobot, NiryoRos, Vision
@@ -120,6 +120,13 @@ def scan_card_image(square_id, max_scan_retries=3):
                     if mean_vec is None:
                         print(f"[FAIL] Failed to extract features after {max_scan_retries} software retries.")
                         return None 
+
+                    category, sentence, audio_path = get_card_category(mean_vec)
+                    
+                    if category:
+                        print(f"[IDENTIFY] Card is: {category}. Playing audio.")
+                        # NOTE: Ensure play_sound is accessible/imported in memory_robot.py
+                        play_sound(audio_path) 
 
                     filename = f"{square_id}.jpg"
                     filepath = os.path.join(image_save_dir, filename)
