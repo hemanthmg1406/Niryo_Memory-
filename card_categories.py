@@ -1,4 +1,4 @@
-
+"""
 MEAN_DOG_A = [0.12, 0.45, 0.98, ...] 
 MEAN_CAT_B = [0.99, 0.05, 0.11, ...] 
 MEAN_CAR_C = [0.55, 0.60, 0.70, ...] 
@@ -25,3 +25,4 @@ CARD_CATEGORY_DATA = {
 
 # Threshold for card identification confidence
 IDENTIFICATION_DISTANCE_THRESHOLD = 0.08
+"""

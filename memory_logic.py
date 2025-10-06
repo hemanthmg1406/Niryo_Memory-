@@ -15,7 +15,8 @@ from config import (
     PCA_DIMS,
     DIFFICULTY_DEFAULT, ROBOT_IP_ADDRESS
 )
-from card_categories import CARD_CATEGORY_DATA, IDENTIFICATION_DISTANCE_THRESHOLD
+
+#from card_categories import CARD_CATEGORY_DATA, IDENTIFICATION_DISTANCE_THRESHOLD
 
 # ---------------------- GLOBALS ----------------------
 DIFFICULTY = DIFFICULTY_DEFAULT
@@ -256,7 +257,7 @@ def robot_play(debug=False):
     log_move("robot_idle", None)
     return []
 
-
+'''
 def get_card_category(mean_vec_current):
     """
     Identifies the category of the scanned card using Euclidean distance 
@@ -285,7 +286,7 @@ def get_card_category(mean_vec_current):
     else:
         print(f"[IDENTIFY] Failed to confidently identify card. Min distance: {min_distance:.4f}")
         return None, None, None
-
+'''
 # ---------------------- HELPERS ----------------------
 def check_match(sq1_id, m1, d1, sq2_id, m2, d2):
     vecs = np.array([m1, m2])
