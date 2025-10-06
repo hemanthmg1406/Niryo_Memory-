@@ -25,7 +25,7 @@ BTN_HARD_HOVER = (175, 122, 197)
 
 
 # ─────────────── 2. New Dashboard-Style Layout ───────────────
-WINDOW_W, WINDOW_H = 1280, 800
+WINDOW_W, WINDOW_H = 1280, 800 # Default window size
 SIDEBAR_WIDTH = 320 # Space for the dashboard
 GRID_PADDING = 40   # Padding around the card grid
 BTN_W, BTN_H = 200, 50
@@ -64,7 +64,10 @@ squares_to_flip_back: List[str] = []
 # ─────────────── Pygame Setup ───────────────
 pygame.init()
 pygame.mixer.init()
-screen = pygame.display.set_mode((WINDOW_W, WINDOW_H))
+
+# --- MODIFICATION FOR RESIZABLE WINDOW ---
+screen = pygame.display.set_mode((WINDOW_W, WINDOW_H), pygame.RESIZABLE)
+
 pygame.display.set_caption("Niryo Memory Match – GUI")
 clock = pygame.time.Clock()
 
@@ -117,12 +120,16 @@ def reset_gui_state():
     global cell_state, recent_clicks, cell_image, ICON_CACHE, squares_to_flip_back
     global game_phase, winner_message
     global CELL_W, CELL_H, GRID_X, GRID_Y
-    global grid_rects, btn_restart, btn_quit, btn_back
+    global grid_rects, btn_restart, btn_quit, btn_back, WINDOW_W, WINDOW_H
+
+    # Update window dimensions in case of resize
+    WINDOW_W, WINDOW_H = screen.get_width(), screen.get_height()
 
     game_phase, winner_message = "playing", ""
     score_human, score_robot, current_turn = 0, 0, "human"
     recent_clicks.clear()
     cell_image.clear()
+    ICON_CACHE.clear() # Clear the icon cache to force recreation of scaled images
     squares_to_flip_back.clear()
 
     start_typewriter_animation("title", "Niryo Memory")
@@ -225,7 +232,7 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
         screen.blit(text_surf, text_rect)
 
 def show_intro() -> None:
-    global difficulty, player_name, audio_profile  # Add audio_profile here
+    global difficulty, player_name, audio_profile, screen, WINDOW_W, WINDOW_H
     user_name = ""
     input_box = pygame.Rect(WINDOW_W // 2 - 150, WINDOW_H // 3 + 80, 300, 50)
     color_inactive = NIRYO_BLUE
@@ -233,9 +240,8 @@ def show_intro() -> None:
     color = color_inactive
     active = False
     name_entered = False
-    profile_selected = False  # New state to track if a profile has been selected
+    profile_selected = False
 
-    # --- Buttons ---
     btn_adult = pygame.Rect(WINDOW_W // 2 - 225, WINDOW_H // 2 + 50, 200, 50)
     btn_kid = pygame.Rect(WINDOW_W // 2 + 25, WINDOW_H // 2 + 50, 200, 50)
 
@@ -257,7 +263,8 @@ def show_intro() -> None:
     difficulty_selection = None
     play_select_level_sound = True
 
-    while difficulty_selection is None:
+    intro_running = True
+    while intro_running:
         mp = pygame.mouse.get_pos()
 
         is_hovering_button = (
@@ -270,6 +277,39 @@ def show_intro() -> None:
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT:
                 shutdown_program()
+
+            elif ev.type == pygame.VIDEORESIZE:
+                screen = pygame.display.set_mode((ev.w, ev.h), pygame.RESIZABLE)
+                WINDOW_W, WINDOW_H = screen.get_width(), screen.get_height()
+                # Recalculate button positions after resize
+                input_box = pygame.Rect(WINDOW_W // 2 - 150, WINDOW_H // 3 + 80, 300, 50)
+                btn_adult = pygame.Rect(WINDOW_W // 2 - 225, WINDOW_H // 2 + 50, 200, 50)
+                btn_kid = pygame.Rect(WINDOW_W // 2 + 25, WINDOW_H // 2 + 50, 200, 50)
+                btn_easy = pygame.Rect(WINDOW_W//2-350, WINDOW_H//2+50, 200, 50)
+                btn_med  = pygame.Rect(WINDOW_W//2-100, WINDOW_H//2+50, 200, 50)
+                btn_hard = pygame.Rect(WINDOW_W//2+150, WINDOW_H//2+50, 200, 50)
+                btn_place_cards = pygame.Rect(WINDOW_W//2 - 225, WINDOW_H//2 + 120, 200, 50)
+                btn_collect_cards = pygame.Rect(WINDOW_W//2 + 25, WINDOW_H//2 + 120, 200, 50)
+
+
+            if ev.type == pygame.KEYDOWN:
+                if ev.key == pygame.K_q:
+                    shutdown_program()
+                if active:
+                    if ev.key == pygame.K_RETURN:
+                        if user_name:
+                            player_name = user_name.capitalize()
+                            name_entered = True
+                            active = False
+                            instruction_text = "Are you an adult or a kid?"
+                            if play_select_level_sound:
+                                pygame.time.set_timer(SELECT_LEVEL_SOUND_EVENT, 200, loops=1)
+                                play_select_level_sound = False
+                    elif ev.key == pygame.K_BACKSPACE:
+                        user_name = user_name[:-1]
+                    else:
+                        if len(user_name) < 20:
+                            user_name += ev.unicode
 
             if ev.type == INTRO_SOUND_EVENT:
                 play_sound("intro")
@@ -303,30 +343,15 @@ def show_intro() -> None:
                     elif btn_easy.collidepoint(mp):
                         difficulty_selection = "easy"
                         play_sound(f"level/easy_{audio_profile}")
+                        intro_running = False
                     elif btn_med.collidepoint(mp):
                         difficulty_selection = "medium"
                         play_sound(f"level/medium_{audio_profile}")
+                        intro_running = False
                     elif btn_hard.collidepoint(mp):
                         difficulty_selection = "hard"
                         play_sound(f"level/hard_{audio_profile}")
-
-
-            if ev.type == pygame.KEYDOWN:
-                if active:
-                    if ev.key == pygame.K_RETURN:
-                        if user_name:
-                            player_name = user_name.capitalize()
-                            name_entered = True
-                            active = False
-                            instruction_text = "Are you an adult or a kid?"
-                            if play_select_level_sound:
-                                pygame.time.set_timer(SELECT_LEVEL_SOUND_EVENT, 200, loops=1)
-                                play_select_level_sound = False
-                    elif ev.key == pygame.K_BACKSPACE:
-                        user_name = user_name[:-1]
-                    else:
-                        if len(user_name) < 20:
-                            user_name += ev.unicode
+                        intro_running = False
 
         screen.fill(BACKGROUND_COLOR)
 
@@ -416,11 +441,11 @@ def handle_robot_msg(msg: dict) -> None:
         if path not in ICON_CACHE:
             try:
                 surf = pygame.image.load(path).convert_alpha()
+                # Recreate the scaled image after a resize
                 ICON_CACHE[path] = pygame.transform.smoothscale(surf, (CELL_W-24, CELL_H-24))
             except Exception as e:
                 print(f"Error loading image {path}: {e}")
                 pass
-        cell_state[sq] = CellState.FACE_UP
         cell_image[sq] = ICON_CACHE.get(path)
 
     elif status == "matched":
@@ -450,7 +475,7 @@ def handle_robot_msg(msg: dict) -> None:
         winner_message = f"{winner_name} wins! {msg['human_score']}–{msg['robot_score']}"
 
 def run_gui() -> None:
-    global recent_clicks, game_phase, difficulty
+    global recent_clicks, game_phase, difficulty, screen
 
     pygame.time.set_timer(INTRO_SOUND_EVENT, 500, loops=1)
     show_intro()
@@ -480,6 +505,14 @@ def run_gui() -> None:
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT:
                 shutdown_program()
+            
+            elif ev.type == pygame.VIDEORESIZE:
+                screen = pygame.display.set_mode((ev.w, ev.h), pygame.RESIZABLE)
+                reset_gui_state()
+
+            elif ev.type == pygame.KEYDOWN:
+                if ev.key == pygame.K_q:
+                    shutdown_program()
 
             if game_phase == "playing":
                 if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
@@ -490,7 +523,6 @@ def run_gui() -> None:
                         try:
                             while True: gui_queue.get_nowait()
                         except queue.Empty: pass
-                        # CHANGE: Send dictionary to play sound
                         square_queue.put({"event": "reset_game", "play_sound": True})
                     elif btn_back.collidepoint(mouse_pos):
                         try:
@@ -499,7 +531,6 @@ def run_gui() -> None:
                         try:
                             while True: gui_queue.get_nowait()
                         except queue.Empty: pass
-                        # CHANGE: Send dictionary to NOT play sound
                         square_queue.put({"event": "reset_game", "play_sound": False})
                         play_sound("intro")
                         show_intro()
