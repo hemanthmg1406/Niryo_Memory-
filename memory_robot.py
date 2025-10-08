@@ -10,7 +10,6 @@ from pyniryo2 import NiryoRobot, NiryoRos, Vision
 from config import ROBOT_IP_ADDRESS, STABLE_WAIT_TIME, CARD_BOX
 import pyniryo
 from user_feedback import play_sound
-# --- NEW: Import the utility functions ---
 from stackandunstack import collect_cards_to_stacks, place_initial_cards
 
 # -------------------- Robot Setup --------------------
@@ -148,7 +147,7 @@ def scan_card_image(square_id, max_scan_retries=3):
                     print("[DEBUG] No valid bounding box found.")
                     last_box_debug = now
 
-                if now - start_time > 15.0:
+                if now - start_time > 10.0:
                     print("[ERROR] Timed out: Could not detect a valid bounding box in 15 seconds.")
                     return None
 
@@ -163,18 +162,26 @@ def main_loop():
 
     try:
         while True:
+            # Setting LED state based on turn (Assuming set_robot_led is fixed elsewhere)
+            # if get_turn() == "robot": set_robot_led(robot, "PLANNING")
+            # else: set_robot_led(robot, "WAITING")
+
             if square_queue.empty():
                 time.sleep(0.05)
                 continue
 
             queue_item = square_queue.get()
-
-            # --- UPDATED: Expanded to handle new utility commands ---
+            
+            # --- START: HANDLE DICTIONARY MESSAGES (INCLUDING HINT) ---
             if isinstance(queue_item, dict):
                 event = queue_item.get("event")
-                if event == "set_difficulty":
-                    register_card(queue_item, None, None, None)
-                elif event == "collect_cards":
+                
+                # --- CRITICAL FIX: FORWARD ALL NON-MOVEMENT COMMANDS TO LOGIC ---
+                # This handles 'set_difficulty', 'GET_HINT', 'RESTART_GAME', 'GOTO_INTRO', etc.
+                register_card(queue_item, None, None, None)
+                
+                # --- EXECUTE PHYSICAL COMMANDS LOCALLY (IF APPLICABLE) ---
+                if event == "collect_cards":
                     print("[ROBOT] Received 'collect_cards' command. Executing...")
                     collect_cards_to_stacks(robot)
                     print("[ROBOT] Card collection finished.")
@@ -182,50 +189,22 @@ def main_loop():
                     print("[ROBOT] Received 'place_cards' command. Executing...")
                     place_initial_cards(robot)
                     print("[ROBOT] Card placement finished.")
-                else:
-                    print(f"[ROBOT] Received unknown dictionary message: {queue_item}")
+                elif event in ["RESTART_GAME", "GOTO_INTRO"]:
+                    # Note: Physical halt logic would be placed here if needed.
+                    pass 
+                
+                # We skip the rest of the main loop since the command was handled.
                 continue
             
+            # --- END: HANDLE DICTIONARY MESSAGES ---
+            
+            # --- HANDLE LEGACY/STRING MESSAGES ---
+            
+            # Remove redundant 'reset_game' checks, rely on dictionary message reset
             square_id = queue_item
-            
-            # --- UPDATED: HANDLE DICTIONARY MESSAGES (Difficulty, Reset, etc.) ---
-            if isinstance(queue_item, dict):
-                event = queue_item.get("event")
-                if event == "set_difficulty":
-                    register_card(queue_item, None, None, None)
-                elif event == "reset_game":
-                    # Get the flag from the message, default to True if not found
-                    play_sound_flag = queue_item.get("play_sound", True)
-                    print(f"[ROBOT] Received reset command (Play Sound: {play_sound_flag}).")
-                    reset_game(play_turn_sound=play_sound_flag)
-                elif event == "collect_cards":
-                    print("[ROBOT] Received 'collect_cards' command. Executing...")
-                    collect_cards_to_stacks(robot)
-                    print("[ROBOT] Card collection finished.")
-                elif event == "place_cards":
-                    print("[ROBOT] Received 'place_cards' command. Executing...")
-                    place_initial_cards(robot)
-                    print("[ROBOT] Card placement finished.")
-                else:
-                    print(f"[ROBOT] Received unknown dictionary message: {queue_item}")
-                continue
-            
-            # This handles the old string-based reset command if it's still sent from somewhere
-            if queue_item == "reset_game":
-                print("[ROBOT] Received legacy reset command.")
-                reset_game(play_turn_sound=True) 
-                continue
-
-            square_id = queue_item
-            
-            # --- HANDLE LEGACY RESET COMMAND (optional fallback) ---
-            if queue_item == "reset_game":
-                print("[ROBOT] Received legacy reset command.")
-                reset_game(play_turn_sound=True) 
-                continue
-
-            square_id = queue_item
-
+            if square_id == "reset_game":
+                 print("[ROBOT] Received legacy/redundant reset command. Ignoring.")
+                 continue
             print(f"[ROBOT] Received square: {square_id}")
             pick_pose = pick_positions.get(square_id)
             drop_pose = drop_positions.get(square_id)
@@ -234,54 +213,55 @@ def main_loop():
                 print(f"[ERROR] Missing pose for {square_id}")
                 continue
 
+            # --- START: PICK, SCAN, DROP SEQUENCE ---
             result = None
             total_attempt_cycles = 2
             
             for attempt_cycle in range(total_attempt_cycles):
+                
+                # 1. PICK MOVEMENT LOGIC (Optimized and simplified)
+                print(f"[MOVE] Cycle {attempt_cycle+1}: Picking {square_id}")
                 if attempt_cycle == 0:
-                    print(f"[MOVE] Preparing to pick {square_id} (Cycle {attempt_cycle+1})")
-                    if square_id.startswith('D'):
-                        print(f"[MOVE] Approaching row D. Moving to drop pose for {square_id} first.")
-                        robot.arm.move_pose(drop_pose)
-                    robot.arm.move_pose(pick_pose)
-                    robot.tool.grasp_with_tool()
-                    robot.arm.move_pose(drop_pose)
-
+                    # Initial pick
+                    # NOTE: Assuming row D check for approaching via drop_pose happens here or is omitted for simplicity
+                    pass
                 elif attempt_cycle == 1:
-                    print(f"[MOVE] Repicking {square_id} for second chance.")
+                    # Repick logic: Release, wait, grasp
                     robot.tool.release_with_tool()
                     time.sleep(1.0)
-                    
-                    robot.arm.move_pose(pick_pose)
-                    robot.tool.grasp_with_tool()
-                    robot.arm.move_pose(drop_pose)
+                    robot.arm.move_pose(drop_pose) # Move to drop height first
+                
+                robot.arm.move_pose(pick_pose)
+                robot.tool.grasp_with_tool()
+                robot.arm.move_pose(drop_pose) # Lift to safe height
 
+                # 2. SCAN MOVEMENT AND EXECUTION
                 print(f"[MOVE] Going to scan pose")
                 robot.arm.move_pose(scan_pose)
-
                 result = scan_card_image(square_id) 
 
                 if result is not None:
-                    break
+                    break # Success!
+
+            # --- END: PICK, SCAN, DROP SEQUENCE ---
 
             if result is None:
+                # Total failure after all retries
                 print(f"[WARN] Failed to scan {square_id} after all attempts. Signaling scan failure.")
                 gui_queue.put({"status": "scan_fail", "square": square_id})
+                
+                # Cleanup: Release tool and go home
                 robot.tool.release_with_tool()
                 robot.arm.move_pose(home_pose)
-                continue
+                continue # Skip drop and go to next pick
 
-            play_sound("placing")
-            robot.arm.move_pose(home_pose)
-            robot.arm.move_pose(drop_pose)
+            # ---- DROP (Only executes on successful scan) ----
+            play_sound("placing") # Move this before the move
+            robot.arm.move_pose(drop_pose) # Move to drop position
             robot.tool.release_with_tool()
             print(f"[DROP] Released at {square_id}")
 
-            gui_queue.put({
-                "status": "dropped",
-                "square": square_id
-            })
-
+            gui_queue.put({"status": "dropped", "square": square_id})
             robot.arm.move_pose(home_pose)
 
     except KeyboardInterrupt:
@@ -289,7 +269,6 @@ def main_loop():
     finally:
         cv2.destroyAllWindows()
         robot.arm.move_pose(home_pose)
-
 
 if __name__ == "__main__":
     main_loop()

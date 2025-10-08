@@ -11,7 +11,7 @@ BACKGROUND_COLOR = (245, 245, 245)
 CARD_BG = (255, 255, 255)
 TEXT_DARK = (20, 30, 40)
 TEXT_LIGHT = (100, 110, 120)
-MATCH_BORDER = (255, 195, 18)  # Gold for match
+MATCH_BORDER = (46, 204, 113)  # Gold for match
 MISMATCH_BORDER = (220, 80, 80) # Red for mismatch
 BUTTON_SHADOW = (200, 200, 200)
 
@@ -31,6 +31,18 @@ GRID_PADDING = 40   # Padding around the card grid
 BTN_W, BTN_H = 200, 50
 ROWS, COLS = 4, 5
 FPS = 60
+HINT_FLASH_END = pygame.USEREVENT + 3 # Choose a new unique event ID
+MESSAGE_TIMER_EVENT = pygame.USEREVENT + 4 # New unique event ID
+btn_hint = pygame.Rect(0,0,0,0) # Define globally
+temporary_message = "" # Stores the message text
+
+# Define the button rect near the bottom of the sidebar
+# Place it above the Restart and Back buttons
+BTN_W, BTN_H = 200, 50 
+# ... (near btn_restart and btn_back definitions)
+
+# Place the Hint button slightly higher than the existing buttons
+btn_hint = pygame.Rect( (SIDEBAR_WIDTH - BTN_W) // 2, WINDOW_H - BTN_H - 240, BTN_W, BTN_H) 
 ALL_SQUARE_IDS = [r + c for r in "ABCD" for c in "12345"]
 
 class CellState(Enum):
@@ -168,6 +180,9 @@ def hit_test(pos) -> Optional[str]:
     return None
 
 def draw_board(hover_lbl: Optional[str], mouse_pos):
+    # Ensure temporary_message is declared globally in the file
+    global difficulty, temporary_message 
+    
     screen.fill(BACKGROUND_COLOR)
 
     sidebar_rect = pygame.Rect(0, 0, SIDEBAR_WIDTH, WINDOW_H)
@@ -195,7 +210,25 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
     diff_surf = font_main.render(diff_text, True, TEXT_LIGHT)
     screen.blit(diff_surf, ( (SIDEBAR_WIDTH - diff_surf.get_width()) // 2, score_y_start + 120) )
 
+    
+    # --- DRAW HINT BUTTON ---
+    if difficulty == "easy":
+        rect = btn_hint
+        label = "Hint"
+        
+        # Check hover state
+        is_hovered = rect.collidepoint(mouse_pos)
+        # Using a distinct color for the Hint (Greenish)
+        btn_color = NIRYO_LIGHT_BLUE if is_hovered else (80, 200, 80) 
+        
+        pygame.draw.rect(screen, BUTTON_SHADOW, rect.move(4,4), border_radius=12)
+        pygame.draw.rect(screen, btn_color, rect, border_radius=12)
+        
+        text_surf = font_main.render(label, True, (255, 255, 255))
+        text_rect = text_surf.get_rect(center=rect.center)
+        screen.blit(text_surf, text_rect)
 
+    # --- DRAW GAME GRID AND CARDS ---
     for lbl, rect in grid_rects.items():
         state = cell_state[lbl]
         inner_rect = rect.inflate(-12, -12)
@@ -222,6 +255,7 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
             if lbl in squares_to_flip_back:
                 pygame.draw.rect(screen, MISMATCH_BORDER, inner_rect, 5, border_radius=8)
 
+    # --- DRAW RESTART/BACK BUTTONS ---
     for rect, label in ((btn_restart,"Restart Game"), (btn_back, "Back")):
         is_hovered = rect.collidepoint(mouse_pos)
         btn_color = NIRYO_LIGHT_BLUE if is_hovered else NIRYO_BLUE
@@ -230,6 +264,24 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
         text_surf = font_main.render(label, True, (255,255,255))
         text_rect = text_surf.get_rect(center=rect.center)
         screen.blit(text_surf, text_rect)
+        
+    # ----------------------------------------------------
+    # --- NEW: DRAW TEMPORARY SCREEN MESSAGE OVER EVERYTHING ---
+    # ----------------------------------------------------
+    if temporary_message:
+        # Create a translucent overlay
+        overlay = pygame.Surface((WINDOW_W, WINDOW_H), pygame.SRCALPHA)
+        # Use semi-transparent black for the background of the message
+        overlay.fill((0, 0, 0, 100)) 
+        
+        # Render the message text (use font_banner for prominence)
+        # NOTE: temporary_message must be a global variable in game_gui.py
+        msg_surf = font_banner.render(temporary_message, True, (255, 255, 255))
+        msg_rect = msg_surf.get_rect(center=(WINDOW_W // 2, WINDOW_H // 2))
+        
+        # Draw overlay and text
+        screen.blit(overlay, (0,0))
+        screen.blit(msg_surf, msg_rect)
 
 def show_intro() -> None:
     global difficulty, player_name, audio_profile, screen, WINDOW_W, WINDOW_H
@@ -298,7 +350,7 @@ def show_intro() -> None:
                 if active:
                     if ev.key == pygame.K_RETURN:
                         if user_name:
-                            player_name = user_name.capitalize()
+                            player_name = user_name
                             name_entered = True
                             active = False
                             instruction_text = "Are you an adult or a kid?"
@@ -352,6 +404,10 @@ def show_intro() -> None:
                         difficulty_selection = "hard"
                         play_sound(f"level/hard_{audio_profile}")
                         intro_running = False
+                    elif difficulty == "easy":
+                        if btn_hint.collidepoint(mp) and game_phase == "playing" and current_turn == "human":
+                            # Send command to the logic thread to find a pair
+                            square_queue.put({"event": "GET_HINT"})
 
         screen.fill(BACKGROUND_COLOR)
 
@@ -430,7 +486,7 @@ def shutdown_program():
     sys.exit()
 
 def handle_robot_msg(msg: dict) -> None:
-    global game_phase, winner_message
+    global game_phase, winner_message, temporary_message
     global current_turn, score_human, score_robot, squares_to_flip_back
     status, event = msg.get("status"), msg.get("event")
 
@@ -446,6 +502,7 @@ def handle_robot_msg(msg: dict) -> None:
             except Exception as e:
                 print(f"Error loading image {path}: {e}")
                 pass
+        cell_state[sq] = CellState.FACE_UP  
         cell_image[sq] = ICON_CACHE.get(path)
 
     elif status == "matched":
@@ -469,10 +526,25 @@ def handle_robot_msg(msg: dict) -> None:
         score_robot = msg.get("robot_score", score_robot)
         start_typewriter_animation("score_human", f"{player_name}: {score_human}")
         start_typewriter_animation("score_robot", f"Niryo: {score_robot}")
-    elif event == "game_over":
+    '''elif event == "game_over": for final win message
         game_phase = "game_over"
         winner_name = player_name if msg['winner'] == 'human' else 'Niryo'
-        winner_message = f"{winner_name} wins! {msg['human_score']}–{msg['robot_score']}"
+        winner_message = f"{winner_name} wins! {msg['human_score']}–{msg['robot_score']}"'''
+    if event == "HINT_FLASH":
+        squares = msg.get("squares", [])
+        
+        # 1. Flip the identified cards FACE_UP
+        for sq in squares:
+            # We must skip matched cards
+            if cell_state.get(sq) != CellState.MATCHED:
+                cell_state[sq] = CellState.FACE_UP 
+        
+        # 2. Start the timer to flip them back after 5 seconds
+        pygame.time.set_timer(HINT_FLASH_END, 5000, loops=1) # 5-second flash
+    
+    if event == "SCREEN_MESSAGE":
+        temporary_message = msg.get("text", "")
+        pygame.time.set_timer(MESSAGE_TIMER_EVENT, 3000, loops=1) # Display for 3 seconds
 
 def run_gui() -> None:
     global recent_clicks, game_phase, difficulty, screen
@@ -513,9 +585,29 @@ def run_gui() -> None:
             elif ev.type == pygame.KEYDOWN:
                 if ev.key == pygame.K_q:
                     shutdown_program()
+            
+            if ev.type == HINT_FLASH_END:
+                # Action: Flip the hint cards back over
+                for sq in ALL_SQUARE_IDS:
+                    # Check if the card is FACE_UP AND NOT permanently matched
+                    if cell_state[sq] == CellState.FACE_UP and cell_state[sq] != CellState.MATCHED:
+                        cell_state[sq] = CellState.BACK
 
+            if ev.type == MESSAGE_TIMER_EVENT:
+                temporary_message = ""
+                
             if game_phase == "playing":
                 if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+                    # --- HANDLE HINT BUTTON CLICK (NEW) ---
+                    if difficulty == "easy" and current_turn == "human":
+                        if btn_hint.collidepoint(mouse_pos):
+                            # Send command to the logic thread to find a pair
+                            square_queue.put({"event": "GET_HINT"})
+                            # Add visual/audio feedback for hint requested here if needed
+                            
+                            # Skip the rest of the mouse handling so it doesn't try to pick a card
+                            continue 
+
                     if btn_restart.collidepoint(mouse_pos):
                         try:
                             while True: square_queue.get_nowait()

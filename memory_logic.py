@@ -50,10 +50,29 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
     global memory_board, turn_state, matched_squares, current_turn, last_flipped
     global score_human, score_robot, DIFFICULTY
 
-    if isinstance(square_id, dict) and square_id.get("event") == "set_difficulty":
-        DIFFICULTY = square_id.get("difficulty", "hard")
-        print(f"[LOGIC] Difficulty set to: {DIFFICULTY}")
-        return {"difficulty_set": True}
+    # --- START DICTIONARY MESSAGE ROUTING ---
+    if isinstance(square_id, dict):
+        event = square_id.get("event")
+
+        # Existing logic for setting difficulty
+        if event == "set_difficulty":
+            DIFFICULTY = square_id.get("difficulty", "hard")
+            print(f"[LOGIC] Difficulty set to: {DIFFICULTY}")
+            return {"difficulty_set": True}
+
+        # NEW LOGIC FOR GET_HINT
+        elif event == "GET_HINT":
+            sq1, sq2 = find_hint_pair()
+            if sq1 and sq2:
+                gui_queue.put({"event": "HINT_FLASH", "squares": [sq1, sq2]})
+            else:
+                gui_queue.put({
+                    "event": "SCREEN_MESSAGE", 
+                    "text": "Niryo: I don't know any pairs yet!", 
+                    "duration": 3000
+                })
+                print("[LOGIC] No known pairs available for hint.")
+            return {"hint_requested": True}
 
     # 1) Skip if already matched
     if square_id in matched_squares:
@@ -333,6 +352,30 @@ def log_move(event, data):
         "turn":      current_turn,
         "timestamp": time.time()
     })
+
+def find_hint_pair():
+    """Searches memory for the first known, unmatched pair."""
+    
+    # We use the same powerful memory logic as the robot's Strategy 0
+    valid_unmatched = [
+        sq for sq in memory_board.keys() 
+        if sq not in matched_squares
+        and memory_board[sq].get("mean") is not None
+        and memory_board[sq].get("desc") is not None
+    ]
+    
+    # Check every known, unmatched pair
+    for i in range(len(valid_unmatched)):
+        for j in range(i + 1, len(valid_unmatched)):
+            sq1, sq2 = valid_unmatched[i], valid_unmatched[j]
+            card1, card2 = memory_board[sq1], memory_board[sq2]
+            
+            # Check for confident match
+            if is_match(sq1, card1["mean"], card1["desc"], sq2, card2["mean"], card2["desc"]):
+                # Found the pair!
+                return sq1, sq2 
+
+    return None, None # No known pair found
 
 def advance_to_next_turn():
     gui_queue.put({"status": "turn", "player": current_turn})
