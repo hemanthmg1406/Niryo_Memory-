@@ -421,4 +421,4 @@ def get_turn():
     return current_turn
 
 def is_game_over():
-    return len(matched_squares) >= len(memory_board)
+    return len(matched_squares) == 20

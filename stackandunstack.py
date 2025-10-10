@@ -113,6 +113,10 @@ def place_initial_cards(robot):
             else:
                 stack_pick_pose[2] = 0.05
 
+            # --- Define a safe height above the stack ---
+            stack_safe_pose = stack_pick_pose[:]
+            stack_safe_pose[2] += 0.03  
+
             target_place_pose = drop_positions.get(target_id)
             
             if not stack_pick_pose or not target_place_pose:
@@ -126,15 +130,20 @@ def place_initial_cards(robot):
                 safe_move(robot, stack_pick_pose)
                 robot.tool.grasp_with_tool()
 
-                # B. Move to Target and Drop
+                # B. Lift the card to a safe height (NEW)
+                safe_move(robot, stack_safe_pose)
+
+                # C. Move to Target and Drop
                 safe_move(robot, target_place_pose)
                 robot.tool.release_with_tool()
 
-                # C. Return to the stack pose
+                # D. Return to the safe height above the stack (NEW)
+                safe_move(robot, stack_safe_pose)
+                
+                # E. Return to the stack pick pose for the next iteration
                 safe_move(robot, stack_pick_pose)
                 
                 card_placed_count+=1
-
 
             except Exception as e:
                 print(f"[FATAL ERROR] Robot movement failed during placement: {e}")
