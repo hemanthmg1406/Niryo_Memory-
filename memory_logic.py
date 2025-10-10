@@ -17,10 +17,11 @@ from config import (
 )
 from stackandunstack import dispose_card_1_on_board,dispose_card_2_held
 
-#from card_categories import CARD_CATEGORY_DATA, IDENTIFICATION_DISTANCE_THRESHOLD
+from card_categories import CARD_CATEGORY_DATA, IDENTIFICATION_DISTANCE_THRESHOLD
 
 # ---------------------- GLOBALS ----------------------
 DIFFICULTY = DIFFICULTY_DEFAULT
+audio_profile = "adult"  # Default audio profile
 
 robot=NiryoRobot(ROBOT_IP_ADDRESS)
 
@@ -49,7 +50,7 @@ score_robot = 0
 
 def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
     global memory_board, turn_state, matched_squares, current_turn, last_flipped
-    global score_human, score_robot, DIFFICULTY
+    global score_human, score_robot, DIFFICULTY, audio_profile
 
     # --- START DICTIONARY MESSAGE ROUTING ---
     if isinstance(square_id, dict):
@@ -58,7 +59,9 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
         # Existing logic for setting difficulty
         if event == "set_difficulty":
             DIFFICULTY = square_id.get("difficulty", "hard")
+            audio_profile = square_id.get("audio_profile", "adult")
             print(f"[LOGIC] Difficulty set to: {DIFFICULTY}")
+            print(f"[LOGIC] Audio profile set to: {audio_profile}")
             return {"difficulty_set": True}
 
         # NEW LOGIC FOR GET_HINT
@@ -68,19 +71,19 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
                 gui_queue.put({"event": "HINT_FLASH", "squares": [sq1, sq2]})
             else:
                 gui_queue.put({
-                    "event": "SCREEN_MESSAGE", 
-                    "text": "Niryo: I don't know any pairs yet!", 
+                    "event": "SCREEN_MESSAGE",
+                    "text": "Niryo: I don't know any pairs yet!",
                     "duration": 3000
                 })
                 print("[LOGIC] No known pairs available for hint.")
             return {"hint_requested": True}
-        
+
 
         elif event in ["RESTART_GAME", "GOTO_INTRO", "reset_game", "collect_cards", "place_cards"]:
-            # Since the robot thread handles the physical action, the logic thread simply 
+            # Since the robot thread handles the physical action, the logic thread simply
             # acknowledges the command and exits without checking for a card.
-            return {"command_received": True} 
-        
+            return {"command_received": True}
+
         # FINAL FALLBACK: If a dictionary is completely unrecognized, exit safely.
         return {"unrecognized_command": True}
 
@@ -169,12 +172,12 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
     }
 
     if match:
-        play_sound("correct_match_human")
-        
         if current_turn == "human":
+            play_sound(f"{audio_profile}/correct_match_human")
             score_human += 1
             set_robot_led(robot,"MATCH_HUMAN")
-        else: 
+        else:
+            play_sound(f"{audio_profile}/correct_match_robot")
             score_robot += 1
             set_robot_led(robot,"MATCH_ROBOT")
         time.sleep(1.0) # Pause to let user see the match LED
@@ -192,10 +195,10 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
             winner = "Human" if score_human > score_robot else "Robot" if score_robot > score_human else "Tie"
             #sounds
             if winner == "Human":
-                play_sound("human_win")
+                play_sound(f"{audio_profile}/human_win")
             else:
-                play_sound("robot_win")
-                
+                play_sound(f"{audio_profile}/robot_win")
+
             #end of sounds
             gui_queue.put({
                 "event": "game_over",
@@ -211,20 +214,22 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
         #robot.arm.move_pose(home_pose)
         return result
     else:
-        if current_turn == "human": 
-            play_sound("wrong_match_human")
+        if current_turn == "human":
+            play_sound(f"{audio_profile}/wrong_match_human")
             set_robot_led(robot,"MISMATCH_HUMAN")
-        else: 
-            play_sound("wrong_match_robot")
+        else:
+            play_sound(f"{audio_profile}/wrong_match_robot")
             set_robot_led(robot,"MISMATCH_ROBOT")
         time.sleep(1.0) # Pause to let user see the mismatch LED
         gui_queue.put({"status":  "flip_back", "squares": [sq1, square_id]})
         print(f"[LOGIC] No match → FLIP_BACK {sq1},{square_id}")
         log_move("mismatch", (sq1, square_id))
-        square_queue.put({"event": "DROP_CURRENT_CARD", "square": square_id})
+       # square_queue.put({"event": "DROP_CURRENT_CARD", "square": square_id})
         new_turn = switch_turn()
-        if new_turn == "human": play_sound("human_turn")
-        else: play_sound("robot_turn")
+        if new_turn == "human":
+            play_sound(f"{audio_profile}/human_turn")
+        else:
+            play_sound(f"{audio_profile}/robot_turn")
         gui_queue.put({"event":  "turn", "player": new_turn})
         print(f"[LOGIC] Turn → {new_turn}")
 
@@ -293,36 +298,32 @@ def robot_play(debug=False):
     log_move("robot_idle", None)
     return []
 
-'''
+# --- memory_logic.py (Add this function) ---
+
 def get_card_category(mean_vec_current):
-    """
-    Identifies the category of the scanned card using Euclidean distance 
-    against master mean vectors.
-    Returns: ("Category Name", "sentence", "audio_path") or (None, None, None)
-    """
+    
     best_match_category = None
     min_distance = float('inf')
 
-    # Calculate distance to every master category
     for category, data in CARD_CATEGORY_DATA.items():
-        mean_master = np.array(data["mean_vec"])
+        # NOTE: data["mean_vec"] must be a NumPy array for fast subtraction
+        mean_master = data["mean_vec"] 
         mean_current = np.array(mean_vec_current)
-
-        # Use NumPy's linalg.norm for Euclidean distance
+        
+        # 1. Calculate Euclidean distance
         distance = np.linalg.norm(mean_master - mean_current)
-
+        
         if distance < min_distance:
             min_distance = distance
             best_match_category = category
-
-    # Check if the best match is below the confidence threshold
+    
+    # 2. Check if the best match is below the strict confidence threshold
     if min_distance <= IDENTIFICATION_DISTANCE_THRESHOLD:
         data = CARD_CATEGORY_DATA[best_match_category]
-        return best_match_category, data["sentence"], data["audio"]
+        return best_match_category, data["sentence"], data["audio_path"]
     else:
-        print(f"[IDENTIFY] Failed to confidently identify card. Min distance: {min_distance:.4f}")
+        # Failed to find a confident match
         return None, None, None
-'''
 # ---------------------- HELPERS ----------------------
 def check_match(sq1_id, m1, d1, sq2_id, m2, d2):
     vecs = np.array([m1, m2])

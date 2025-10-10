@@ -380,10 +380,12 @@ def show_intro() -> None:
                     if btn_adult.collidepoint(mp):
                         audio_profile = "adult"
                         profile_selected = True
+                        play_sound("adult/description_human")
                         instruction_text = f"Hello {player_name}, select difficulty or setup board:"
                     elif btn_kid.collidepoint(mp):
                         audio_profile = "kid"
                         profile_selected = True
+                        play_sound("kid/description_kid")
                         instruction_text = f"Hello {player_name}, select difficulty or setup board:"
                 elif ev.button == 1:
                     if btn_place_cards.collidepoint(mp):
@@ -394,15 +396,24 @@ def show_intro() -> None:
                         square_queue.put({"event": "collect_cards"})
                     elif btn_easy.collidepoint(mp):
                         difficulty_selection = "easy"
-                        play_sound(f"adult/level_human/easy")
+                        if audio_profile == 'adult':
+                            play_sound("adult/level_human/easy")
+                        else:
+                            play_sound("kid/level_kid/easy1")
                         intro_running = False
                     elif btn_med.collidepoint(mp):
                         difficulty_selection = "medium"
-                        play_sound(f"adult/level_human/medium")
+                        if audio_profile == 'adult':
+                            play_sound("adult/level_human/medium")
+                        else:
+                            play_sound("kid/level_kid/medium1")
                         intro_running = False
                     elif btn_hard.collidepoint(mp):
                         difficulty_selection = "hard"
-                        play_sound(f"adult/level_human/hard")
+                        if audio_profile == 'adult':
+                            play_sound("adult/level_human/hard")
+                        else:
+                            play_sound("kid/level_kid/hard1")
                         intro_running = False
                     elif difficulty == "easy":
                         if btn_hint.collidepoint(mp) and game_phase == "playing" and current_turn == "human":
@@ -473,7 +484,6 @@ def show_intro() -> None:
         pygame.display.flip()
         clock.tick(FPS)
     difficulty = difficulty_selection
-
 
 def shutdown_program():
     screen.fill(BACKGROUND_COLOR)
@@ -592,7 +602,7 @@ def run_gui() -> None:
                     # Check if the card is FACE_UP AND NOT permanently matched
                     if cell_state[sq] == CellState.FACE_UP and cell_state[sq] != CellState.MATCHED:
                         cell_state[sq] = CellState.BACK
-
+            global temporary_message
             if ev.type == MESSAGE_TIMER_EVENT:
                 temporary_message = ""
                 

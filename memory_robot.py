@@ -3,7 +3,7 @@ import os
 import time
 import numpy as np
 from memory_queues import square_queue, gui_queue
-from memory_logic import register_card, reset_game,robot_play #,get_card_category
+from memory_logic import register_card, reset_game,robot_play, get_card_category
 from sift_utils import *
 from recorded_positions import *
 from pyniryo2 import NiryoRobot, NiryoRos, Vision
@@ -119,14 +119,16 @@ def scan_card_image(square_id, max_scan_retries=3):
                     if mean_vec is None:
                         print(f"[FAIL] Failed to extract features after {max_scan_retries} software retries.")
                         return None
-                    '''
-                    category, sentence, audio_path = get_card_category(mean_vec)
+                    
+                    category, sentence , audio_path= get_card_category(mean_vec)
                     
                     if category:
-                        print(f"[IDENTIFY] Card is: {category}. Playing audio.")
+                        print(f"[IDENTIFY] CARD FOUND: {category}")
+                        print(f"[IDENTIFY] ROBOT ANNOUNCES: {sentence}")
                         # NOTE: Ensure play_sound is accessible/imported in memory_robot.py
-                        play_sound(audio_path)
-                    '''
+                        #play_sound(audio_path)
+                    else:
+                        print("[IDENTIFY] No matching category found.")
                     
                     filename = f"{square_id}.jpg"
                     filepath = os.path.join(image_save_dir, filename)
@@ -193,23 +195,8 @@ def main_loop():
                     place_initial_cards(robot)
                     gui_queue.put({"event": "SCREEN_MESSAGE", "text": "Card placement finished."})
                     print("[ROBOT] Card placement finished.")
-                elif event == "DROP_CURRENT_CARD":
-                    square_id_to_drop = queue_item.get("square")
-                    print(f"[ROBOT] Received DROP command for mismatch: {square_id_to_drop}.")
-                    
-                    # 1. Execute physical drop
-                    drop_pose_target = drop_positions.get(square_id_to_drop)
-                    robot.arm.move_pose(drop_pose_target)
-                    robot.tool.release_with_tool()
-                    play_sound("placing") 
-                    
-                    # 2. Inform GUI (local drop logic should update the GUI status)
-                    gui_queue.put({"status": "dropped", "square": square_id_to_drop})
-                    
-                    # 3. Return to safe pose
-                    robot.arm.move_pose(home_pose)
-                    
-                # --- NEW: HANDLE PLAN COMMAND ---
+               #here here
+                
                 elif event == "PLAN_NEXT_ROBOT_MOVE":
                     print("[ROBOT] Received PLAN_NEXT_ROBOT_MOVE command. Executing planning.")
                     picks = robot_play()
