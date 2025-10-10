@@ -204,6 +204,7 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
                 "robot_score": score_robot
             })
             print(f"[LOGIC] GAME OVER: {winner} wins!")
+            square_queue.put({"event": "place_cards"})
         else:
             # Continue same turn (only if game is NOT over)
             advance_to_next_turn()
@@ -220,6 +221,7 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
         gui_queue.put({"status":  "flip_back", "squares": [sq1, square_id]})
         print(f"[LOGIC] No match → FLIP_BACK {sq1},{square_id}")
         log_move("mismatch", (sq1, square_id))
+        square_queue.put({"event": "DROP_CURRENT_CARD", "square": square_id})
         new_turn = switch_turn()
         if new_turn == "human": play_sound("human_turn")
         else: play_sound("robot_turn")
@@ -227,9 +229,7 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
         print(f"[LOGIC] Turn → {new_turn}")
 
         if new_turn == "robot":
-            picks = robot_play()
-            for pick in picks:
-                square_queue.put(pick)
+            square_queue.put({"event": "PLAN_NEXT_ROBOT_MOVE"})
 
     return result
 

@@ -3,7 +3,7 @@ import os
 import time
 import numpy as np
 from memory_queues import square_queue, gui_queue
-from memory_logic import register_card, reset_game #,get_card_category
+from memory_logic import register_card, reset_game,robot_play #,get_card_category
 from sift_utils import *
 from recorded_positions import *
 from pyniryo2 import NiryoRobot, NiryoRos, Vision
@@ -118,14 +118,14 @@ def scan_card_image(square_id, max_scan_retries=3):
                     
                     if mean_vec is None:
                         print(f"[FAIL] Failed to extract features after {max_scan_retries} software retries.")
-                        return None 
+                        return None
                     '''
                     category, sentence, audio_path = get_card_category(mean_vec)
                     
                     if category:
                         print(f"[IDENTIFY] Card is: {category}. Playing audio.")
                         # NOTE: Ensure play_sound is accessible/imported in memory_robot.py
-                        play_sound(audio_path) 
+                        play_sound(audio_path)
                     '''
                     
                     filename = f"{square_id}.jpg"
@@ -189,14 +189,36 @@ def main_loop():
                     print("[ROBOT] Card collection finished.")
                 elif event == "place_cards":
                     print("[ROBOT] Received 'place_cards' command. Executing...")
+                    gui_queue.put({"event": "SCREEN_MESSAGE", "text": "Placing cards..."})
                     place_initial_cards(robot)
+                    gui_queue.put({"event": "SCREEN_MESSAGE", "text": "Card placement finished."})
                     print("[ROBOT] Card placement finished.")
                 elif event == "DROP_CURRENT_CARD":
-                    print(f"[SAFETY] Ignored {event} command during scanning.")
-                    continue
+                    square_id_to_drop = queue_item.get("square")
+                    print(f"[ROBOT] Received DROP command for mismatch: {square_id_to_drop}.")
+                    
+                    # 1. Execute physical drop
+                    drop_pose_target = drop_positions.get(square_id_to_drop)
+                    robot.arm.move_pose(drop_pose_target)
+                    robot.tool.release_with_tool()
+                    play_sound("placing") 
+                    
+                    # 2. Inform GUI (local drop logic should update the GUI status)
+                    gui_queue.put({"status": "dropped", "square": square_id_to_drop})
+                    
+                    # 3. Return to safe pose
+                    robot.arm.move_pose(home_pose)
+                    
+                # --- NEW: HANDLE PLAN COMMAND ---
+                elif event == "PLAN_NEXT_ROBOT_MOVE":
+                    print("[ROBOT] Received PLAN_NEXT_ROBOT_MOVE command. Executing planning.")
+                    picks = robot_play()
+                    for pick in picks:
+                        square_queue.put(pick)
+                    print(f"[ROBOT] Enqueued next moves: {picks}")
                 elif event in ["RESTART_GAME", "GOTO_INTRO"]:
                     # Note: Physical halt logic would be placed here if needed.
-                    pass 
+                    pass
                 
                 # We skip the rest of the main loop since the command was handled.
                 continue
@@ -244,7 +266,7 @@ def main_loop():
                 print(f"[MOVE] Going to scan pose")
                 robot.arm.move_pose(scan_pose)
                 is_scanning = True
-                result = scan_card_image(square_id) 
+                result = scan_card_image(square_id)
                 is_scanning = False
                 if result is not None:
                     break # Success!
@@ -260,6 +282,10 @@ def main_loop():
                 robot.tool.release_with_tool()
                 robot.arm.move_pose(home_pose)
                 continue # Skip drop and go to next pick
+
+            if result.get("match"):
+                robot.arm.move_pose(home_pose)
+                continue
 
             # ---- DROP (Only executes on successful scan) ----
             play_sound("placing") # Move this before the move

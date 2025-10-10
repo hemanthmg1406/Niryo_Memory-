@@ -38,11 +38,11 @@ temporary_message = "" # Stores the message text
 
 # Define the button rect near the bottom of the sidebar
 # Place it above the Restart and Back buttons
-BTN_W, BTN_H = 200, 50 
+BTN_W, BTN_H = 200, 50
 # ... (near btn_restart and btn_back definitions)
 
 # Place the Hint button slightly higher than the existing buttons
-btn_hint = pygame.Rect( (SIDEBAR_WIDTH - BTN_W) // 2, WINDOW_H - BTN_H - 240, BTN_W, BTN_H) 
+btn_hint = pygame.Rect( (SIDEBAR_WIDTH - BTN_W) // 2, WINDOW_H - BTN_H - 240, BTN_W, BTN_H)
 ALL_SQUARE_IDS = [r + c for r in "ABCD" for c in "12345"]
 
 class CellState(Enum):
@@ -181,7 +181,7 @@ def hit_test(pos) -> Optional[str]:
 
 def draw_board(hover_lbl: Optional[str], mouse_pos):
     # Ensure temporary_message is declared globally in the file
-    global difficulty, temporary_message 
+    global difficulty, temporary_message
     
     screen.fill(BACKGROUND_COLOR)
 
@@ -219,7 +219,7 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
         # Check hover state
         is_hovered = rect.collidepoint(mouse_pos)
         # Using a distinct color for the Hint (Greenish)
-        btn_color = NIRYO_LIGHT_BLUE if is_hovered else (80, 200, 80) 
+        btn_color = NIRYO_LIGHT_BLUE if is_hovered else (80, 200, 80)
         
         pygame.draw.rect(screen, BUTTON_SHADOW, rect.move(4,4), border_radius=12)
         pygame.draw.rect(screen, btn_color, rect, border_radius=12)
@@ -272,7 +272,7 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
         # Create a translucent overlay
         overlay = pygame.Surface((WINDOW_W, WINDOW_H), pygame.SRCALPHA)
         # Use semi-transparent black for the background of the message
-        overlay.fill((0, 0, 0, 100)) 
+        overlay.fill((0, 0, 0, 100))
         
         # Render the message text (use font_banner for prominence)
         # NOTE: temporary_message must be a global variable in game_gui.py
@@ -394,15 +394,15 @@ def show_intro() -> None:
                         square_queue.put({"event": "collect_cards"})
                     elif btn_easy.collidepoint(mp):
                         difficulty_selection = "easy"
-                        play_sound(f"level/easy_{audio_profile}")
+                        play_sound(f"adult/level_human/easy")
                         intro_running = False
                     elif btn_med.collidepoint(mp):
                         difficulty_selection = "medium"
-                        play_sound(f"level/medium_{audio_profile}")
+                        play_sound(f"adult/level_human/medium")
                         intro_running = False
                     elif btn_hard.collidepoint(mp):
                         difficulty_selection = "hard"
-                        play_sound(f"level/hard_{audio_profile}")
+                        play_sound(f"adult/level_human/hard")
                         intro_running = False
                     elif difficulty == "easy":
                         if btn_hint.collidepoint(mp) and game_phase == "playing" and current_turn == "human":
@@ -502,7 +502,7 @@ def handle_robot_msg(msg: dict) -> None:
             except Exception as e:
                 print(f"Error loading image {path}: {e}")
                 pass
-        cell_state[sq] = CellState.FACE_UP  
+        cell_state[sq] = CellState.FACE_UP
         cell_image[sq] = ICON_CACHE.get(path)
 
     elif status == "matched":
@@ -526,10 +526,10 @@ def handle_robot_msg(msg: dict) -> None:
         score_robot = msg.get("robot_score", score_robot)
         start_typewriter_animation("score_human", f"{player_name}: {score_human}")
         start_typewriter_animation("score_robot", f"Niryo: {score_robot}")
-    '''elif event == "game_over": for final win message
+    elif event == "game_over":
         game_phase = "game_over"
         winner_name = player_name if msg['winner'] == 'human' else 'Niryo'
-        winner_message = f"{winner_name} wins! {msg['human_score']}–{msg['robot_score']}"'''
+        winner_message = f"{winner_name} wins! {msg['human_score']}–{msg['robot_score']}"
     if event == "HINT_FLASH":
         squares = msg.get("squares", [])
         
@@ -537,7 +537,7 @@ def handle_robot_msg(msg: dict) -> None:
         for sq in squares:
             # We must skip matched cards
             if cell_state.get(sq) != CellState.MATCHED:
-                cell_state[sq] = CellState.FACE_UP 
+                cell_state[sq] = CellState.FACE_UP
         
         # 2. Start the timer to flip them back after 5 seconds
         pygame.time.set_timer(HINT_FLASH_END, 5000, loops=1) # 5-second flash
@@ -606,7 +606,7 @@ def run_gui() -> None:
                             # Add visual/audio feedback for hint requested here if needed
                             
                             # Skip the rest of the mouse handling so it doesn't try to pick a card
-                            continue 
+                            continue
 
                     if btn_restart.collidepoint(mouse_pos):
                         try:
