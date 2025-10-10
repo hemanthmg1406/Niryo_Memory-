@@ -5,7 +5,7 @@ import numpy as np
 from memory_queues import square_queue, gui_queue
 from memory_logic import register_card, reset_game #,get_card_category
 from sift_utils import *
-from recorded_positions import pick_positions, drop_positions, home_pose, scan_pose
+from recorded_positions import *
 from pyniryo2 import NiryoRobot, NiryoRos, Vision
 from config import ROBOT_IP_ADDRESS, STABLE_WAIT_TIME, CARD_BOX
 import pyniryo
@@ -21,7 +21,7 @@ robot.arm.move_pose(home_pose)
 
 image_save_dir = "scanned_cards"
 os.makedirs(image_save_dir, exist_ok=True)
-
+is_scanning = False
 
 
 def is_at_scan_pose(current, target, tol=0.1):
@@ -155,6 +155,7 @@ def scan_card_image(square_id, max_scan_retries=3):
             print("[FATAL ERROR] Exception in scan_card_image:", e)
             return None
 
+
 # -------------------- Main Loop --------------------
 def main_loop():
     print("[READY] Awaiting square picks...")
@@ -181,6 +182,7 @@ def main_loop():
                 register_card(queue_item, None, None, None)
                 
                 # --- EXECUTE PHYSICAL COMMANDS LOCALLY (IF APPLICABLE) ---
+                
                 if event == "collect_cards":
                     print("[ROBOT] Received 'collect_cards' command. Executing...")
                     collect_cards_to_stacks(robot)
@@ -189,6 +191,9 @@ def main_loop():
                     print("[ROBOT] Received 'place_cards' command. Executing...")
                     place_initial_cards(robot)
                     print("[ROBOT] Card placement finished.")
+                elif event == "DROP_CURRENT_CARD":
+                    print(f"[SAFETY] Ignored {event} command during scanning.")
+                    continue
                 elif event in ["RESTART_GAME", "GOTO_INTRO"]:
                     # Note: Physical halt logic would be placed here if needed.
                     pass 
@@ -212,7 +217,7 @@ def main_loop():
             if pick_pose is None or drop_pose is None:
                 print(f"[ERROR] Missing pose for {square_id}")
                 continue
-
+            time.sleep(0.3) # Brief pause before action
             # --- START: PICK, SCAN, DROP SEQUENCE ---
             result = None
             total_attempt_cycles = 2
@@ -238,8 +243,9 @@ def main_loop():
                 # 2. SCAN MOVEMENT AND EXECUTION
                 print(f"[MOVE] Going to scan pose")
                 robot.arm.move_pose(scan_pose)
+                is_scanning = True
                 result = scan_card_image(square_id) 
-
+                is_scanning = False
                 if result is not None:
                     break # Success!
 

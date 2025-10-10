@@ -15,6 +15,7 @@ from config import (
     PCA_DIMS,
     DIFFICULTY_DEFAULT, ROBOT_IP_ADDRESS
 )
+from stackandunstack import dispose_card_1_on_board,dispose_card_2_held
 
 #from card_categories import CARD_CATEGORY_DATA, IDENTIFICATION_DISTANCE_THRESHOLD
 
@@ -73,6 +74,16 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
                 })
                 print("[LOGIC] No known pairs available for hint.")
             return {"hint_requested": True}
+        
+
+        elif event in ["RESTART_GAME", "GOTO_INTRO", "reset_game", "collect_cards", "place_cards"]:
+            # Since the robot thread handles the physical action, the logic thread simply 
+            # acknowledges the command and exits without checking for a card.
+            return {"command_received": True} 
+        
+        # FINAL FALLBACK: If a dictionary is completely unrecognized, exit safely.
+        return {"unrecognized_command": True}
+
 
     # 1) Skip if already matched
     if square_id in matched_squares:
@@ -159,9 +170,7 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
 
     if match:
         play_sound("correct_match_human")
-        matched_squares.update([sq1, square_id])
-        memory_board[sq1]["matched"]       = True
-        memory_board[square_id]["matched"] = True
+        
         if current_turn == "human":
             score_human += 1
             set_robot_led(robot,"MATCH_HUMAN")
@@ -171,6 +180,12 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
         time.sleep(1.0) # Pause to let user see the match LED
         gui_queue.put({"status":  "matched", "squares": [sq1, square_id]})
         gui_queue.put({"event": "score", "human_score": score_human, "robot_score": score_robot})
+        dispose_card_2_held(robot,square_id)
+        dispose_card_1_on_board(robot,sq1)
+
+        matched_squares.update([sq1, square_id])
+        memory_board[sq1]["matched"]       = True
+        memory_board[square_id]["matched"] = True
         print(f"[LOGIC] Pair matched: {sq1}, {square_id} → +1 {current_turn}")
         log_move("match", (sq1, square_id))
         if is_game_over():
@@ -192,6 +207,8 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
         else:
             # Continue same turn (only if game is NOT over)
             advance_to_next_turn()
+        #robot.arm.move_pose(home_pose)
+        return result
     else:
         if current_turn == "human": 
             play_sound("wrong_match_human")

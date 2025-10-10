@@ -1,89 +1,45 @@
 import os
-import random
-import time
-import pyniryo2
-from pyniryo2 import NiryoRobot, NiryoRos
 
-# ──────────── INIT ────────────
-# Ensure the robot's IP address is correct
-ROBOT_IP_ADDRESS = "169.254.200.200"
+# The name of the main folder containing your sound categories
 SOUND_ROOT = "sounds"
 
-robot = None  # Initialize robot to None
-print("Connecting to robot...")
-try:
-    robot = NiryoRobot(ROBOT_IP_ADDRESS)
-    ros_instance = NiryoRos(ROBOT_IP_ADDRESS)
-    sound_interface = pyniryo2.Sound(ros_instance)
-    print("✅ Connection successful.")
-except Exception as e:
-    print(f"❌ Failed to connect to robot: {e}")
-    exit()
-
-
-# ──────────── UPLOAD ALL SOUNDS TO ROBOT ────────────
-def upload_all_sounds():
+def list_all_sound_files_recursively():
     """
-    Dynamically finds all .wav files in all subdirectories of SOUND_ROOT
-    and uploads them to the robot.
+    Scans the SOUND_ROOT directory and all its subdirectories, printing a
+    structured list of all folders and the .wav files within them.
     """
-    print("\n📦 Starting sound upload process...")
+    print(f"Recursively listing contents of the '{SOUND_ROOT}' directory...")
+    print("-" * 50)
+
+    # Check if the main sounds directory exists
     if not os.path.isdir(SOUND_ROOT):
-        print(f"❌ Error: The root sound folder '{SOUND_ROOT}' was not found.")
+        print(f"❌ Error: The directory '{SOUND_ROOT}' was not found.")
+        print("Please make sure you are running this script in the same location as your 'sounds' folder.")
         return
 
-    # os.walk will go through the root folder and all its subdirectories
-    for dirpath, _, filenames in os.walk(SOUND_ROOT):
-        for filename in filenames:
-            if filename.endswith(".wav"):
-                sound_name = filename
-                full_path = os.path.join(dirpath, filename)
+    # os.walk() will traverse the directory tree top-down
+    # dirpath is the path of the current directory
+    # _ (we use an underscore) is for the list of subdirectories in dirpath
+    # filenames is a list of the files in dirpath
+    found_any_files = False
+    for dirpath, _, filenames in sorted(os.walk(SOUND_ROOT)):
+        # We only want to process folders that contain .wav files
+        wav_files = sorted([f for f in filenames if f.endswith(".wav")])
 
-                try:
-                    sound_interface.save(sound_name, full_path)
-                    print(f"✅ Uploaded: {sound_name}")
-                except Exception as e:
-                    msg = str(e)
-                    if "already exists" in msg or "Failure to write" in msg:
-                        print(f"⚠️  Skipped (already exists): {sound_name}")
-                    else:
-                        print(f"❌ ERROR uploading {sound_name}: {msg}")
-    print("\n✅ Sound upload process complete.")
+        if wav_files:
+            found_any_files = True
+            # Get a clean, relative path to display as the category name
+            category_name = os.path.relpath(dirpath, '.')
+            print(f"\n📁 Category: {category_name}")
 
+            for wav_file in wav_files:
+                print(f"   🎵 {wav_file}")
 
-# ──────────── DEMO TO TEST A SOUND ────────────
-def play_random_sound_from_category(category):
-    """
-    A helper function to test if sounds are working.
-    """
-    folder_path = os.path.join(SOUND_ROOT, category)
-    if not os.path.isdir(folder_path):
-        print(f"❌ Invalid category for demo: {category}")
-        return
+    if not found_any_files:
+        print("⚠️ No .wav files were found in any subdirectories.")
 
-    wav_files = [f for f in os.listdir(folder_path) if f.endswith(".wav")]
-    if not wav_files:
-        print(f"⚠️ No sounds found in: {category}")
-        return
-
-    chosen = random.choice(wav_files)
-    try:
-        print(f"\n🔊 Playing test sound: {chosen} from category '{category}'")
-        robot.sound.play(chosen, wait_end=True)
-    except Exception as e:
-        print(f"❌ Error playing sound: {e}")
+    print("-" * 50)
 
 
-# ──────────── MAIN EXECUTION ────────────
 if __name__ == "__main__":
-    try:
-        upload_all_sounds()
-        
-        # Example of testing a sound
-        # time.sleep(1)
-        # play_random_sound_from_category("robot_win")
-
-    finally:
-        # The pyniryo2 library handles disconnection automatically when the script ends.
-        # No explicit close() call is needed.
-        print("\n👋 Script finished.")
+    list_all_sound_files_recursively()
