@@ -195,7 +195,7 @@ def main_loop():
                     place_initial_cards(robot)
                     gui_queue.put({"event": "SCREEN_MESSAGE", "text": "Card placement finished."})
                     print("[ROBOT] Card placement finished.")
-               #here here
+               
                 
                 elif event == "PLAN_NEXT_ROBOT_MOVE":
                     print("[ROBOT] Received PLAN_NEXT_ROBOT_MOVE command. Executing planning.")

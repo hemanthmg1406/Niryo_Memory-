@@ -85,26 +85,21 @@ def collect_cards_to_stacks(robot):
 
 
 def place_initial_cards(robot):
-    """
-    Distributes 20 cards from the 4 fixed supply stacks (5 cards each)
-    randomly onto the 20 board positions.
-    """
+
     print("[SETUP] Starting automatic card placement...")
 
-    # 1. Prepare sequence lists
     target_slots = ALL_SQUARE_IDS[:]
     random.shuffle(target_slots)
 
-    # 2. Execute the 20 pick-and-place movements
     safe_move(robot, home_pose)
     
     card_placed_count = 0
+    stack_ids = ["L1", "L2", "R1", "R2"]
 
-    for stack_id in ["L1", "L2", "R1", "R2"]:
+    for idx, stack_id in enumerate(stack_ids):
         for i in range(5):
             target_id = target_slots.pop(0)
 
-            # --- Get Poses ---
             stack_pick_pose = STACKS_DATA.get(stack_id)[:]
 
             # Adjust Z value based on pick count
@@ -113,7 +108,7 @@ def place_initial_cards(robot):
             else:
                 stack_pick_pose[2] = 0.05
 
-            # --- Define a safe height above the stack ---
+            # Safe height above current stack
             stack_safe_pose = stack_pick_pose[:]
             stack_safe_pose[2] += 0.03  
 
@@ -126,30 +121,34 @@ def place_initial_cards(robot):
             print(f"[MOVE] Placing card {card_placed_count+1}/20: From {stack_id} to {target_id}")
 
             try:
-                # A. Pick from Stack (Go to position, Pick)
+                # Pick from Stack
                 safe_move(robot, stack_pick_pose)
                 robot.tool.grasp_with_tool()
 
-                # B. Lift the card to a safe height (NEW)
+                # Lift to safe height
                 safe_move(robot, stack_safe_pose)
 
-                # C. Move to Target and Drop
+                # Move to Target and Drop
                 safe_move(robot, target_place_pose)
                 robot.tool.release_with_tool()
 
-                # D. Return to the safe height above the stack (NEW)
+                # Return to safe height above stack
                 safe_move(robot, stack_safe_pose)
                 
-                # E. Return to the stack pick pose for the next iteration
-                safe_move(robot, stack_pick_pose)
-                
-                card_placed_count+=1
+                card_placed_count += 1
 
             except Exception as e:
                 print(f"[FATAL ERROR] Robot movement failed during placement: {e}")
                 robot.tool.release_with_tool()
                 safe_move(robot, home_pose)
                 return
+
+        # --- Move to safe height above next stack (not home_pose) ---
+        if idx + 1 < len(stack_ids):
+            next_stack_id = stack_ids[idx + 1]
+            next_stack_pose = STACKS_DATA.get(next_stack_id)[:]
+            next_stack_pose[2] += 0.03  # Safe height above next stack
+            safe_move(robot, next_stack_pose)
 
     print("[SETUP] Card placement complete.")
     safe_move(robot, home_pose)
