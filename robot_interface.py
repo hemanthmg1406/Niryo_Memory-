@@ -9,9 +9,9 @@ def set_robot_led(robot, state: str):
     # Define colors as RGB lists (R, G, B)
     COLOR_RED = [255, 0, 0]
     COLOR_GREEN = [0, 255, 0]
-    COLOR_BLUE = [0, 0, 255]
+    COLOR_BLUE = [255, 0, 255]
     COLOR_PURPLE = [128, 0, 128] 
-    COLOR_MAGENTA = [255, 0, 255] # For SCAN_FAIL
+    COLOR_MAGENTA = [0, 0, 255] # For SCAN_FAIL
     
     # --- State: Robot is Planning/Waiting ---
     if state == "PLANNING":

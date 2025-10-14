@@ -1,5 +1,5 @@
 ROBOT_IP_ADDRESS = "169.254.200.200"
-STABLE_WAIT_TIME = 2.0  # Seconds card must remain stable for scan
+STABLE_WAIT_TIME = 1.0  # Seconds card must remain stable for scan
 GRIPPER_TOOL_ID  = 1    # ID for the vacuum gripper (or custom tool)
 
 # --- GAME BOARD LAYOUT ---

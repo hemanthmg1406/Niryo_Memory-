@@ -195,7 +195,7 @@ def main_loop():
                     place_initial_cards(robot)
                     gui_queue.put({"event": "SCREEN_MESSAGE", "text": "Card placement finished."})
                     print("[ROBOT] Card placement finished.")
-               
+               #here
                 
                 elif event == "PLAN_NEXT_ROBOT_MOVE":
                     print("[ROBOT] Received PLAN_NEXT_ROBOT_MOVE command. Executing planning.")
@@ -266,8 +266,9 @@ def main_loop():
                 gui_queue.put({"status": "scan_fail", "square": square_id})
                 
                 # Cleanup: Release tool and go home
+                robot.arm.move_pose(drop_pose)
                 robot.tool.release_with_tool()
-                robot.arm.move_pose(home_pose)
+               # robot.arm.move_pose(home_pose)
                 continue # Skip drop and go to next pick
 
             if result.get("match"):
@@ -281,7 +282,9 @@ def main_loop():
             print(f"[DROP] Released at {square_id}")
 
             gui_queue.put({"status": "dropped", "square": square_id})
-            robot.arm.move_pose(home_pose)
+            #robot.arm.move_pose(home_pose)
+            if square_queue.empty():
+                 robot.arm.move_pose(home_pose)
 
     except KeyboardInterrupt:
         print("[STOP] Interrupted by user.")

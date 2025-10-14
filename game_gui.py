@@ -1,4 +1,4 @@
-import sys, queue, pygame
+import sys, queue, pygame, random
 from enum import Enum, auto
 from typing import Dict, List, Optional
 from memory_queues import square_queue, gui_queue
@@ -49,6 +49,26 @@ class CellState(Enum):
     BACK = auto()
     FACE_UP = auto()
     MATCHED = auto()
+
+class Confetti:
+    def __init__(self, x, y, x_vel, y_vel, color):
+        self.x = x
+        self.y = y
+        self.x_vel = x_vel
+        self.y_vel = y_vel
+        self.color = color
+        self.radius = random.randint(2, 4)
+
+    def update(self):
+        self.x += self.x_vel
+        self.y += self.y_vel
+        self.y_vel += 0.1  # Gravity
+
+    def draw(self, screen):
+        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+
+confetti_particles = []
+
 
 # --- Core State Variables ---
 cell_state: Dict[str, CellState] = {}
@@ -388,13 +408,16 @@ def show_intro() -> None:
                         play_sound("kid/description_kid")
                         instruction_text = f"Hello {player_name}, select difficulty or setup board:"
                 elif ev.button == 1:
+                    """
                     if btn_place_cards.collidepoint(mp):
                         print("[GUI] Place Cards button clicked. Sending command...")
                         square_queue.put({"event": "place_cards"})
                     elif btn_collect_cards.collidepoint(mp):
                         print("[GUI] Collect Cards button clicked. Sending command...")
                         square_queue.put({"event": "collect_cards"})
-                    elif btn_easy.collidepoint(mp):
+                        """
+                    
+                    if btn_easy.collidepoint(mp):
                         difficulty_selection = "easy"
                         if audio_profile == 'adult':
                             play_sound("adult/level_human/easy")
@@ -469,7 +492,7 @@ def show_intro() -> None:
                 text_color = TEXT_DARK if label == "Medium" else (255, 255, 255)
                 txt = font_main.render(label, True, text_color)
                 screen.blit(txt, txt.get_rect(center=btn.center))
-
+            """"
             utility_buttons = [
                 (btn_place_cards, "Place Cards"),
                 (btn_collect_cards, "Collect Cards")
@@ -480,7 +503,7 @@ def show_intro() -> None:
                 pygame.draw.rect(screen, clr, btn, border_radius=12)
                 txt = font_main.render(label, True, (255, 255, 255))
                 screen.blit(txt, txt.get_rect(center=btn.center))
-
+            """
         pygame.display.flip()
         clock.tick(FPS)
     difficulty = difficulty_selection
@@ -539,7 +562,9 @@ def handle_robot_msg(msg: dict) -> None:
     elif event == "game_over":
         game_phase = "game_over"
         winner_name = player_name if msg['winner'] == 'human' else 'Niryo'
-        winner_message = f"{winner_name} wins! {msg['human_score']}–{msg['robot_score']}"
+        winner_message = f"{winner_name} WON!"
+    elif event == "GOTO_INTRO":
+        game_phase = "intro"
     if event == "HINT_FLASH":
         squares = msg.get("squares", [])
         
@@ -570,6 +595,13 @@ def run_gui() -> None:
     running = True
 
     while running:
+        if game_phase == "intro":
+            show_intro()
+            reset_gui_state()
+            game_phase = "playing"
+            if difficulty:
+                square_queue.put({"event": "set_difficulty", "difficulty": difficulty})
+
         update_typewriter_animations()
 
         try:
@@ -656,16 +688,31 @@ def run_gui() -> None:
             elif game_phase == "game_over":
                 if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
                     if btn_restart.collidepoint(mouse_pos):
+                        confetti_particles.clear()
                         try:
                             while True: square_queue.get_nowait()
                         except queue.Empty: pass
                         try:
                             while True: gui_queue.get_nowait()
                         except queue.Empty: pass
-                        square_queue.put("reset_game")
+                        square_queue.put({"event": "reset_game", "play_sound": True})
 
         draw_board(hover_lbl, mouse_pos)
         if game_phase == "game_over":
+            if not confetti_particles:  # Create confetti only once
+                for _ in range(200):  # Create 200 confetti particles
+                    x = random.randint(0, WINDOW_W)
+                    y = random.randint(-WINDOW_H, 0)
+                    x_vel = random.uniform(-2, 2)
+                    y_vel = random.uniform(1, 5)
+                    color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+                    confetti_particles.append(Confetti(x, y, x_vel, y_vel, color))
+
+            # Update and draw confetti
+            for particle in confetti_particles:
+                particle.update()
+                particle.draw(screen)
+
             if "winner_msg" not in animation_states or animation_states["winner_msg"]['full_text'] != winner_message:
                  start_typewriter_animation("winner_msg", winner_message)
 
