@@ -4,6 +4,8 @@ import random
 import threading
 from sklearn.decomposition import PCA
 import sys, queue
+import os
+import glob
 from pyniryo2 import NiryoRobot
 from memory_queues import gui_queue, square_queue
 from sift_utils import compute_knn_match_score
@@ -404,6 +406,12 @@ def reset_game(play_turn_sound=True): # <-- CHANGE #1: Add the argument
     current_turn = "human"
     score_human = 0
     score_robot = 0
+    image_save_dir = "scanned_cards"
+    for f in glob.glob(os.path.join(image_save_dir, "*")):
+        try:
+            os.remove(f)
+        except OSError as e:
+            print(f"[ERROR] Could not delete file {f}: {e}")
     gui_queue.put({"status":"reset"})
     gui_queue.put({"event":"turn","player":"human"})
     if play_turn_sound: # <-- CHANGE #2: Add this 'if' condition

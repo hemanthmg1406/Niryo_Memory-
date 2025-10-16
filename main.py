@@ -7,7 +7,7 @@ from memory_robot import main_loop
 
 def start_robot():
     print("[LAUNCH] Starting robot thread...")
-    main_loop()
+    main_loop() 
 
 
 def start_gui():

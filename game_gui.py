@@ -33,8 +33,11 @@ ROWS, COLS = 4, 5
 FPS = 60
 HINT_FLASH_END = pygame.USEREVENT + 3 # Choose a new unique event ID
 MESSAGE_TIMER_EVENT = pygame.USEREVENT + 4 # New unique event ID
+ROBOT_STATUS_EVENT = pygame.USEREVENT + 5
 btn_hint = pygame.Rect(0,0,0,0) # Define globally
 temporary_message = "" # Stores the message text
+robot_status_message = ""
+RESET_DESTINATION = "game" # Default reset destination
 
 # Define the button rect near the bottom of the sidebar
 # Place it above the Restart and Back buttons
@@ -108,11 +111,12 @@ try:
     font_main = pygame.font.SysFont("Arial", 24)
     font_title = pygame.font.SysFont("Arial", 36, bold=True)
     font_banner = pygame.font.SysFont("Arial", 48, bold=True)
+    font_status = pygame.font.SysFont("Arial", 32, bold=True)
 except:
     font_main = pygame.font.SysFont("sans-serif", 24)
     font_title = pygame.font.SysFont("sans-serif", 36, bold=True)
     font_banner = pygame.font.SysFont("sans-serif", 48, bold=True)
-
+    font_status = pygame.font.SysFont("sans-serif", 32, bold=True)
 
 MEMORY_BACK = pygame.image.load("memory.PNG").convert_alpha()
 
@@ -153,9 +157,15 @@ def reset_gui_state():
     global game_phase, winner_message
     global CELL_W, CELL_H, GRID_X, GRID_Y
     global grid_rects, btn_restart, btn_quit, btn_back, WINDOW_W, WINDOW_H
+    global robot_status_message
+    global RESET_DESTINATION
+    
+
+    
 
     # Update window dimensions in case of resize
     WINDOW_W, WINDOW_H = screen.get_width(), screen.get_height()
+    robot_status_message = ""
 
     game_phase, winner_message = "playing", ""
     score_human, score_robot, current_turn = 0, 0, "human"
@@ -164,12 +174,21 @@ def reset_gui_state():
     ICON_CACHE.clear() # Clear the icon cache to force recreation of scaled images
     squares_to_flip_back.clear()
 
+    start_typewriter_animation("robot_status", "System Ready")
     start_typewriter_animation("title", "Niryo Memory")
     start_typewriter_animation("banner", "Your Turn")
     start_typewriter_animation("score_human", f"{player_name}: {score_human}")
     start_typewriter_animation("score_robot", f"Robot: {score_robot}")
     start_typewriter_animation("difficulty", f"Level: {difficulty.capitalize()}")
 
+    for sq in ALL_SQUARE_IDS:
+        # 1. Flip all non-matched cards back to BACK state
+        if cell_state.get(sq) != CellState.MATCHED:
+            cell_state[sq] = CellState.BACK 
+        
+        # 2. Clear any images that were revealed
+        if sq in cell_image:
+            del cell_image[sq]
 
     for sq in ALL_SQUARE_IDS:
         cell_state[sq] = CellState.BACK
@@ -193,6 +212,7 @@ def reset_gui_state():
     btn_restart = pygame.Rect( (SIDEBAR_WIDTH - BTN_W) // 2, WINDOW_H - BTN_H - 100, BTN_W, BTN_H)
     btn_back = pygame.Rect( (SIDEBAR_WIDTH - BTN_W) // 2, WINDOW_H - BTN_H - 170, BTN_W, BTN_H)
     btn_quit    = pygame.Rect(0,0,0,0)
+    RESET_DESTINATION = "game" 
 
 def hit_test(pos) -> Optional[str]:
     for lbl, rect in grid_rects.items():
@@ -229,7 +249,14 @@ def draw_board(hover_lbl: Optional[str], mouse_pos):
 
     diff_surf = font_main.render(diff_text, True, TEXT_LIGHT)
     screen.blit(diff_surf, ( (SIDEBAR_WIDTH - diff_surf.get_width()) // 2, score_y_start + 120) )
-
+    status_text = animation_states.get("robot_status", {}).get("visible_text", "")
+    STATUS_COLOR=(0,180,180)
+    status_surf = font_status.render(status_text, True, STATUS_COLOR) # Use NIRYO_BLUE for a clear status
+    
+    # Position the status below difficulty, centered
+    status_y_start = score_y_start + 180 
+    screen.blit(status_surf, ( (SIDEBAR_WIDTH - status_surf.get_width()) // 2, status_y_start) )
+    # --- END NEW DRAW ---
     
     # --- DRAW HINT BUTTON ---
     if difficulty == "easy":
@@ -521,7 +548,15 @@ def shutdown_program():
 def handle_robot_msg(msg: dict) -> None:
     global game_phase, winner_message, temporary_message
     global current_turn, score_human, score_robot, squares_to_flip_back
+    global robot_status_message
+    global ICON_CACHE, cell_image
+
     status, event = msg.get("status"), msg.get("event")
+    if event == "CACHE_BUST":
+        path = msg.get("image_path")
+        if path in ICON_CACHE:
+            del ICON_CACHE[path] # Remove the old surface from the cache
+            print(f"[GUI] Cleared image cache for {path}.")
 
     if status == "reveal":
         sq, path = msg["square"], msg["image_path"]
@@ -548,7 +583,11 @@ def handle_robot_msg(msg: dict) -> None:
         pygame.time.set_timer(FLIP_BACK_EVENT, 2000, loops=1)
 
     elif status == "reset":
+        global RESET_DESTINATION
         reset_gui_state()
+        if RESET_DESTINATION == "intro":
+            global game_phase
+            game_phase = "intro"
 
     if event == "turn":
         current_turn = msg.get("player", "human")
@@ -562,7 +601,10 @@ def handle_robot_msg(msg: dict) -> None:
     elif event == "game_over":
         game_phase = "game_over"
         winner_name = player_name if msg['winner'] == 'human' else 'Niryo'
-        winner_message = f"{winner_name} WON!"
+        if msg['winner'] == 'Tie':
+             winner_message = f"It's a TIE! {msg['human_score']} points each."
+        else:
+             winner_message = f"{winner_name} WON! Final Score: {msg['human_score']}–{msg['robot_score']}"
     elif event == "GOTO_INTRO":
         game_phase = "intro"
     if event == "HINT_FLASH":
@@ -580,10 +622,18 @@ def handle_robot_msg(msg: dict) -> None:
     if event == "SCREEN_MESSAGE":
         temporary_message = msg.get("text", "")
         pygame.time.set_timer(MESSAGE_TIMER_EVENT, 3000, loops=1) # Display for 3 seconds
+    if event == "SCREEN_MESSAGE_STATUS":
+        robot_status_message = msg.get("text", "")
+        # Reset the typewriter animation with the new text
+        start_typewriter_animation("robot_status", robot_status_message)
+        # Set the timer to clear it (Note: timer is set by the sender thread)
+        # We rely on the receiver's loop to execute the timer event.
+
 
 def run_gui() -> None:
-    global recent_clicks, game_phase, difficulty, screen
 
+    global recent_clicks, game_phase, difficulty, screen
+    global RESET_DESTINATION
     pygame.time.set_timer(INTRO_SOUND_EVENT, 500, loops=1)
     show_intro()
 
@@ -637,6 +687,10 @@ def run_gui() -> None:
             global temporary_message
             if ev.type == MESSAGE_TIMER_EVENT:
                 temporary_message = ""
+            if ev.type == ROBOT_STATUS_EVENT:
+                global robot_status_message
+                robot_status_message = ""
+                start_typewriter_animation("robot_status", "")
                 
             if game_phase == "playing":
                 if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
@@ -651,26 +705,20 @@ def run_gui() -> None:
                             continue
 
                     if btn_restart.collidepoint(mouse_pos):
-                        try:
-                            while True: square_queue.get_nowait()
-                        except queue.Empty: pass
-                        try:
-                            while True: gui_queue.get_nowait()
-                        except queue.Empty: pass
-                        square_queue.put({"event": "reset_game", "play_sound": True})
+                         
+                        RESET_DESTINATION = "game"
+                        square_queue.put({"event": "RESTART_GAME"})
                     elif btn_back.collidepoint(mouse_pos):
-                        try:
-                            while True: square_queue.get_nowait()
-                        except queue.Empty: pass
-                        try:
-                            while True: gui_queue.get_nowait()
-                        except queue.Empty: pass
-                        square_queue.put({"event": "reset_game", "play_sound": False})
+                        recent_clicks.clear()
+                        RESET_DESTINATION = "intro"
+                        square_queue.put({"event": "GOTO_INTRO"})
                         play_sound("intro")
                         show_intro()
                         reset_gui_state()
                         if difficulty:
                             square_queue.put({"event": "set_difficulty", "difficulty": difficulty})
+                            
+                        #running = False
 
 
                     elif current_turn == "human" and hover_lbl and len(recent_clicks) < 2:
@@ -688,14 +736,9 @@ def run_gui() -> None:
             elif game_phase == "game_over":
                 if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
                     if btn_restart.collidepoint(mouse_pos):
-                        confetti_particles.clear()
-                        try:
-                            while True: square_queue.get_nowait()
-                        except queue.Empty: pass
-                        try:
-                            while True: gui_queue.get_nowait()
-                        except queue.Empty: pass
-                        square_queue.put({"event": "reset_game", "play_sound": True})
+                        RESET_DESTINATION = "game"
+                        square_queue.put({"event": "RESTART_GAME"})
+                        
 
         draw_board(hover_lbl, mouse_pos)
         if game_phase == "game_over":

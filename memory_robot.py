@@ -1,9 +1,12 @@
+import queue
 import cv2
 import os
 import time
 import numpy as np
+import pygame
+from game_gui import ROBOT_STATUS_EVENT
 from memory_queues import square_queue, gui_queue
-from memory_logic import register_card, reset_game,robot_play, get_card_category
+from memory_logic import register_card, reset_game,robot_play
 from sift_utils import *
 from recorded_positions import *
 from pyniryo2 import NiryoRobot, NiryoRos, Vision
@@ -120,20 +123,11 @@ def scan_card_image(square_id, max_scan_retries=3):
                         print(f"[FAIL] Failed to extract features after {max_scan_retries} software retries.")
                         return None
                     
-                    category, sentence , audio_path= get_card_category(mean_vec)
-                    
-                    if category:
-                        print(f"[IDENTIFY] CARD FOUND: {category}")
-                        print(f"[IDENTIFY] ROBOT ANNOUNCES: {sentence}")
-                        # NOTE: Ensure play_sound is accessible/imported in memory_robot.py
-                        #play_sound(audio_path)
-                    else:
-                        print("[IDENTIFY] No matching category found.")
-                    
                     filename = f"{square_id}.jpg"
                     filepath = os.path.join(image_save_dir, filename)
                     cv2.imwrite(filepath, card)
                     print(f"[ROBOT] Captured {square_id} → {filepath}")
+                    gui_queue.put({"event": "CACHE_BUST", "image_path": filepath})
 
                     result = register_card(square_id, mean_vec, descriptors, filepath, debug=True)
 
@@ -156,6 +150,17 @@ def scan_card_image(square_id, max_scan_retries=3):
         except Exception as e:
             print("[FATAL ERROR] Exception in scan_card_image:", e)
             return None
+
+# --- memory_robot.py (New Helper Function) ---
+def send_robot_status(message: str):
+    """Sends a temporary status message to the GUI with a 3s timer."""
+    # NOTE: robot_status_message is the key used in start_typewriter_animation
+    gui_queue.put({"event": "SCREEN_MESSAGE_STATUS", "text": message})
+    
+    # Use the specific timer event ID defined in game_gui.py
+    pygame.time.set_timer(ROBOT_STATUS_EVENT, 10000, loops=1) 
+    
+# NOTE: You must import this function and the ROBOT_STATUS_EVENT constant into memory_logic.py
 
 
 # -------------------- Main Loop --------------------
@@ -195,8 +200,6 @@ def main_loop():
                     place_initial_cards(robot)
                     gui_queue.put({"event": "SCREEN_MESSAGE", "text": "Card placement finished."})
                     print("[ROBOT] Card placement finished.")
-               #here
-                
                 elif event == "PLAN_NEXT_ROBOT_MOVE":
                     print("[ROBOT] Received PLAN_NEXT_ROBOT_MOVE command. Executing planning.")
                     picks = robot_play()
@@ -205,7 +208,30 @@ def main_loop():
                     print(f"[ROBOT] Enqueued next moves: {picks}")
                 elif event in ["RESTART_GAME", "GOTO_INTRO"]:
                     # Note: Physical halt logic would be placed here if needed.
+                    print(f"[ROBOT] Received '{event}' command. Resetting robot state.")
+                    # 1. IMMEDIATE STOP/SAFE STATE
+                    #robot.arm.move_pose(drop_pose)
+                    #robot.tool.release_with_tool()
+                    
+                    robot.arm.move_pose(home_pose)
+                    
+                    # 2. CLEAR PENDING COMMAND QUEUE
+                    try:
+                        while True: 
+                            square_queue.get_nowait()
+                    except queue.Empty:
+                        pass
                     pass
+                    
+                    if event == "RESTART_GAME":
+                        reset_game(play_turn_sound=True)
+                    else:
+                        reset_game(play_turn_sound=False)
+
+                    continue
+
+                register_card(queue_item, None, None, None)
+                
                 
                 # We skip the rest of the main loop since the command was handled.
                 continue
@@ -226,38 +252,63 @@ def main_loop():
             if pick_pose is None or drop_pose is None:
                 print(f"[ERROR] Missing pose for {square_id}")
                 continue
-            time.sleep(0.3) # Brief pause before action
+            send_robot_status(f"Moving to : {square_id}")
+            time.sleep(0.1) # Brief pause before action
+            #robot.arm.move_pose(pick_pose)
             # --- START: PICK, SCAN, DROP SEQUENCE ---
             result = None
-            total_attempt_cycles = 2
+            total_attempt_cycles = 3
             
             for attempt_cycle in range(total_attempt_cycles):
-                
+                try:
                 # 1. PICK MOVEMENT LOGIC (Optimized and simplified)
-                print(f"[MOVE] Cycle {attempt_cycle+1}: Picking {square_id}")
-                if attempt_cycle == 0:
+                    print(f"[MOVE] Cycle {attempt_cycle+1}: Picking {square_id}")
+                    if attempt_cycle == 0:
+                        robot.arm.move_pose(drop_pose)
+
                     # Initial pick
                     # NOTE: Assuming row D check for approaching via drop_pose happens here or is omitted for simplicity
-                    pass
-                elif attempt_cycle == 1:
+                        print(f"[MOVE] Cycle 1: Picking {square_id}")
+                        pass
+                    elif attempt_cycle == 1:
                     # Repick logic: Release, wait, grasp
-                    robot.tool.release_with_tool()
-                    time.sleep(1.0)
-                    robot.arm.move_pose(drop_pose) # Move to drop height first
+                        print(f"[MOVE] Cycle 2: Picking {square_id}")
+                        robot.arm.move_pose(drop_pose)
+                        robot.tool.release_with_tool()
+                        time.sleep(1.0)
+
+                    #robot.arm.move_pose(drop_pose) # Move to drop height first
                 
-                robot.arm.move_pose(pick_pose)
-                robot.tool.grasp_with_tool()
-                robot.arm.move_pose(drop_pose) # Lift to safe height
+                    robot.arm.move_pose(pick_pose)
+                    robot.tool.grasp_with_tool()
+                    robot.arm.move_pose(drop_pose) # Lift to safe height
 
                 # 2. SCAN MOVEMENT AND EXECUTION
-                print(f"[MOVE] Going to scan pose")
-                robot.arm.move_pose(scan_pose)
-                is_scanning = True
-                result = scan_card_image(square_id)
-                is_scanning = False
-                if result is not None:
-                    break # Success!
-
+                    print(f"[MOVE] Going to scan pose")
+                    robot.arm.move_pose(scan_pose)
+                    global is_scanning
+                    is_scanning = True
+                    result = scan_card_image(square_id)
+                    is_scanning = False
+                    if result is not None:
+                        break # Success!
+                except Exception as e:
+                    # --- EMERGENCY RECOVERY ACTION ---
+                    # This catches the Motion Planning abortion (the orange light/collision error)
+                    print(f"[RECOVERY] Motion failed during pick/scan: {e}. Executing emergency drop.")
+                    
+                    # 1. Force move to the safe drop pose
+                    robot.arm.move_pose(drop_pose) 
+                    
+                    # 2. Release the card
+                    robot.tool.release_with_tool()
+                    
+                    # 3. Move home and signal failure
+                    robot.arm.move_pose(home_pose) 
+                    
+                    result = None # Force a total failure for the outer check
+                    break # Stop the retry loop
+                    
             # --- END: PICK, SCAN, DROP SEQUENCE ---
 
             if result is None:
@@ -266,9 +317,20 @@ def main_loop():
                 gui_queue.put({"status": "scan_fail", "square": square_id})
                 
                 # Cleanup: Release tool and go home
+                
                 robot.arm.move_pose(drop_pose)
                 robot.tool.release_with_tool()
+                robot.arm.move_pose(home_pose)
+                """
+                try:
+                    while not square_queue.empty():
+                        square_queue.get_nowait()
+                        print("[ROBOT] Cleared stale pick from queue due to scan failure.")
+                except queue.Empty:
+                    pass
+
                # robot.arm.move_pose(home_pose)
+               """
                 continue # Skip drop and go to next pick
 
             if result.get("match"):
@@ -276,13 +338,13 @@ def main_loop():
                 continue
 
             # ---- DROP (Only executes on successful scan) ----
-            play_sound("placing") # Move this before the move
+           # play_sound("placing") # Move this before the move
             robot.arm.move_pose(drop_pose) # Move to drop position
             robot.tool.release_with_tool()
             print(f"[DROP] Released at {square_id}")
 
             gui_queue.put({"status": "dropped", "square": square_id})
-            #robot.arm.move_pose(home_pose)
+            robot.arm.move_pose(home_pose)
             if square_queue.empty():
                  robot.arm.move_pose(home_pose)
 

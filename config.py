@@ -11,7 +11,7 @@ CARD_BOX         = (270, 190, 190, 190)
 # --- COMPUTER VISION CONFIG ---
 PCA_DIMS                  = 3
 # Note: These values can be changed later to adjust difficulty
-MATCH_DISTANCE_THRESHOLD  = 60  # Max distance for PCA to count as match
+MATCH_DISTANCE_THRESHOLD  = 90  # Max distance for PCA to count as match
 MATCH_KNN_SCORE_THRESHOLD = 0.5  # Min score for KNN to count as match
 
 # --- DIFFICULTY CONFIG ---
