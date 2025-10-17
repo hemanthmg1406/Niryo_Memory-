@@ -104,9 +104,9 @@ def place_initial_cards(robot):
 
             # Adjust Z value based on pick count
             if i < 2:
-                stack_pick_pose[2] = 0.055
+                stack_pick_pose[2] = 0.065
             else:
-                stack_pick_pose[2] = 0.05
+                stack_pick_pose[2] = 0.06
 
             # Safe height above current stack
             stack_safe_pose = stack_pick_pose[:]

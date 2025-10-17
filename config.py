@@ -11,8 +11,20 @@ CARD_BOX         = (270, 190, 190, 190)
 # --- COMPUTER VISION CONFIG ---
 PCA_DIMS                  = 3
 # Note: These values can be changed later to adjust difficulty
-MATCH_DISTANCE_THRESHOLD  = 90  # Max distance for PCA to count as match
+MATCH_DISTANCE_THRESHOLD  = 75  # Max distance for PCA to count as match
 MATCH_KNN_SCORE_THRESHOLD = 0.5  # Min score for KNN to count as match
 
 # --- DIFFICULTY CONFIG ---
 DIFFICULTY_DEFAULT = "hard" # Default setting when the game starts
+
+SOUND_FOLDER = "sounds/chocolate/"
+
+# --- Robot Pose Definitions (Joint Angles) ---
+# Each list represents the angles for the 6 joints of the robot.
+HOME_POSE = [0.22, -0.0, 0.21, -2.96, 1.54, -2.9783]
+PRE_GRASP_POSE = [0.26, 0.03, 0.15, 1.55, 0.2, 1.497]
+GIVE_POSE = [0.41, 0.0, 0.25, -0.03, 1.06, -0.0264]
+
+# --- Visual & Tool Configuration ---
+# An RGB color value for the LED ring animation (a nice chocolatey brown)
+CHOCOLATE_BROWN_COLOR = [139, 69, 19]

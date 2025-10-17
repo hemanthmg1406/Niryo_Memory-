@@ -4,6 +4,7 @@ import os
 import time
 import numpy as np
 import pygame
+import glob
 from game_gui import ROBOT_STATUS_EVENT
 from memory_queues import square_queue, gui_queue
 from memory_logic import register_card, reset_game,robot_play
@@ -200,19 +201,35 @@ def main_loop():
                     place_initial_cards(robot)
                     gui_queue.put({"event": "SCREEN_MESSAGE", "text": "Card placement finished."})
                     print("[ROBOT] Card placement finished.")
+                elif event == "DROP_CURRENT_CARD":
+                    square_id_to_drop = queue_item.get("square")
+                    print(f"[ROBOT] Received DROP command for mismatch: {square_id_to_drop}.")
+                    # 1. Execute physical drop (using the card ID received)
+                    drop_pose_target = drop_positions.get(square_id_to_drop)
+                    robot.arm.move_pose(drop_pose_target)
+
+                    robot.tool.release_with_tool()
+                    
+
+                    gui_queue.put({"status": "dropped", "square": square_id_to_drop})
+                    # 2. Return to safe pose
+                    robot.arm.move_pose(home_pose)
+                    continue
                 elif event == "PLAN_NEXT_ROBOT_MOVE":
                     print("[ROBOT] Received PLAN_NEXT_ROBOT_MOVE command. Executing planning.")
                     picks = robot_play()
                     for pick in picks:
                         square_queue.put(pick)
                     print(f"[ROBOT] Enqueued next moves: {picks}")
+                
                 elif event in ["RESTART_GAME", "GOTO_INTRO"]:
                     # Note: Physical halt logic would be placed here if needed.
                     print(f"[ROBOT] Received '{event}' command. Resetting robot state.")
                     # 1. IMMEDIATE STOP/SAFE STATE
                     #robot.arm.move_pose(drop_pose)
                     #robot.tool.release_with_tool()
-                    
+                    robot.arm.move_pose(drop_pose)
+                    robot.tool.release_with_tool()
                     robot.arm.move_pose(home_pose)
                     
                     # 2. CLEAR PENDING COMMAND QUEUE
@@ -221,7 +238,11 @@ def main_loop():
                             square_queue.get_nowait()
                     except queue.Empty:
                         pass
-                    pass
+
+                    
+                    for f in glob.glob(os.path.join("scanned_cards", "*")):
+                        os.remove(f)
+                    print("[ROBOT] All previous scans and memory data cleared.")
                     
                     if event == "RESTART_GAME":
                         reset_game(play_turn_sound=True)
@@ -253,7 +274,6 @@ def main_loop():
                 print(f"[ERROR] Missing pose for {square_id}")
                 continue
             send_robot_status(f"Moving to : {square_id}")
-            time.sleep(0.1) # Brief pause before action
             #robot.arm.move_pose(pick_pose)
             # --- START: PICK, SCAN, DROP SEQUENCE ---
             result = None
@@ -344,7 +364,7 @@ def main_loop():
             print(f"[DROP] Released at {square_id}")
 
             gui_queue.put({"status": "dropped", "square": square_id})
-            robot.arm.move_pose(home_pose)
+            #robot.arm.move_pose(home_pose)
             if square_queue.empty():
                  robot.arm.move_pose(home_pose)
 

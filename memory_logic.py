@@ -91,8 +91,8 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
 
     # 1) Skip if already matched
     if square_id in matched_squares:
-        if debug: print(f"[SKIP] {square_id} already matched.")
-        return {"skip": True}
+        print(f"[LOGIC] Overwriting old entry for {square_id} from previous game.")
+        memory_board.pop(square_id, None)
 
     # 2) Save features & log
     memory_board[square_id] = {"mean": mean_vec, "desc": raw_desc, "matched": False}
@@ -174,14 +174,16 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
 
     if match:
         if current_turn == "human":
-            play_sound(f"{audio_profile}/correct_match_human")
+            if audio_profile == "kid":
+                play_sound("kid/correct_match_kid")
+            else:
+                play_sound("adult/correct_match_human")
             score_human += 1
             set_robot_led(robot,"MATCH_HUMAN")
         else:
             play_sound(f"{audio_profile}/correct_match_robot")
             score_robot += 1
             set_robot_led(robot,"MATCH_ROBOT")
-        time.sleep(1.0) # Pause to let user see the match LED
         gui_queue.put({"status":  "matched", "squares": [sq1, square_id]})
         gui_queue.put({"event": "score", "human_score": score_human, "robot_score": score_robot})
         dispose_card_2_held(robot,square_id)
@@ -193,12 +195,19 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
         print(f"[LOGIC] Pair matched: {sq1}, {square_id} → +1 {current_turn}")
         log_move("match", (sq1, square_id))
         if is_game_over():
+            square_queue.put({"event": "place_cards"})
             winner = "Human" if score_human > score_robot else "Robot" if score_robot > score_human else "Tie"
             #sounds
             if winner == "Human":
-                play_sound(f"{audio_profile}/human_win")
-            else:
-                play_sound(f"{audio_profile}/robot_win")
+                if audio_profile == "kid":
+                    play_sound("kid/kid_win")
+                else:
+                    play_sound("adult/human_win")
+            elif winner == "Robot":
+                if audio_profile == "kid":
+                    play_sound("kid/robot_win")
+                else:
+                    play_sound("adult/robot_win")
 
             #end of sounds
             gui_queue.put({
@@ -208,7 +217,7 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
                 "robot_score": score_robot
             })
             print(f"[LOGIC] GAME OVER: {winner} wins!")
-            gui_queue.put({"event": "GOTO_INTRO"})
+            square_queue.put({"event": "GOTO_INTRO"})
             
         else:
             # Continue same turn (only if game is NOT over)
@@ -217,27 +226,35 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
         return result
     else:
         if current_turn == "human":
-            play_sound(f"{audio_profile}/wrong_match_human")
+            if audio_profile == "kid":
+                play_sound("kid/wrong_match_kid")
+            else:
+                play_sound("adult/wrong_match_human")
             set_robot_led(robot,"MISMATCH_HUMAN")
         else:
             play_sound(f"{audio_profile}/wrong_match_robot")
             set_robot_led(robot,"MISMATCH_ROBOT")
-        time.sleep(1.0) # Pause to let user see the mismatch LED
         gui_queue.put({"status":  "flip_back", "squares": [sq1, square_id]})
         print(f"[LOGIC] No match → FLIP_BACK {sq1},{square_id}")
         log_move("mismatch", (sq1, square_id))
-       # square_queue.put({"event": "DROP_CURRENT_CARD", "square": square_id})
+        
+        square_queue.put({"event": "DROP_CURRENT_CARD", "square": square_id})
         new_turn = switch_turn()
         if new_turn == "human":
-            play_sound(f"{audio_profile}/human_turn")
+            if audio_profile == "kid":
+                play_sound("kid/kid_turn")
+            else:
+                play_sound("adult/human_turn")
         else:
             play_sound(f"{audio_profile}/robot_turn")
+            square_queue.put({"event": "PLAN_NEXT_ROBOT_MOVE"})
+        print(f"[LOGIC-OUT] Turn changed to {new_turn}. Quitting register_card.")
         gui_queue.put({"event":  "turn", "player": new_turn})
         print(f"[LOGIC] Turn → {new_turn}")
-
+        """
         if new_turn == "robot":
             square_queue.put({"event": "PLAN_NEXT_ROBOT_MOVE"})
-
+        """
     return result
 
 # ---------------------- ROBOT STRATEGY ----------------------

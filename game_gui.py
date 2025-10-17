@@ -632,7 +632,7 @@ def handle_robot_msg(msg: dict) -> None:
 
 def run_gui() -> None:
 
-    global recent_clicks, game_phase, difficulty, screen
+    global recent_clicks, game_phase, difficulty, screen , audio_profile
     global RESET_DESTINATION
     pygame.time.set_timer(INTRO_SOUND_EVENT, 500, loops=1)
     show_intro()
