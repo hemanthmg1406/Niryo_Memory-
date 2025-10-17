@@ -600,7 +600,7 @@ def handle_robot_msg(msg: dict) -> None:
         start_typewriter_animation("score_robot", f"Niryo: {score_robot}")
     elif event == "game_over":
         game_phase = "game_over"
-        winner_name = player_name if msg['winner'] == 'human' else 'Niryo'
+        winner_name = player_name if msg['winner'] == 'Human' else 'Niryo'
         if msg['winner'] == 'Tie':
              winner_message = f"It's a TIE! {msg['human_score']} points each."
         else:
@@ -641,7 +641,7 @@ def run_gui() -> None:
     hover_lbl = None
     reset_gui_state()
     if difficulty:
-        square_queue.put({"event": "set_difficulty", "difficulty": difficulty})
+        square_queue.put({"event": "set_difficulty", "difficulty": difficulty, "audio_profile": audio_profile})
     running = True
 
     while running:
@@ -650,7 +650,7 @@ def run_gui() -> None:
             reset_gui_state()
             game_phase = "playing"
             if difficulty:
-                square_queue.put({"event": "set_difficulty", "difficulty": difficulty})
+                square_queue.put({"event": "set_difficulty", "difficulty": difficulty, "audio_profile": audio_profile})
 
         update_typewriter_animations()
 
@@ -716,7 +716,7 @@ def run_gui() -> None:
                         show_intro()
                         reset_gui_state()
                         if difficulty:
-                            square_queue.put({"event": "set_difficulty", "difficulty": difficulty})
+                            square_queue.put({"event": "set_difficulty", "difficulty": difficulty, "audio_profile": audio_profile})
                             
                         #running = False
 

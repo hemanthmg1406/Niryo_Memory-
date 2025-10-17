@@ -199,7 +199,9 @@ def main_loop():
                     print("[ROBOT] Received 'place_cards' command. Executing...")
                     gui_queue.put({"event": "SCREEN_MESSAGE", "text": "Placing cards..."})
                     place_initial_cards(robot)
+                    time.sleep(0.5)
                     gui_queue.put({"event": "SCREEN_MESSAGE", "text": "Card placement finished."})
+                    time.sleep(0.5)
                     print("[ROBOT] Card placement finished.")
                 elif event == "DROP_CURRENT_CARD":
                     square_id_to_drop = queue_item.get("square")
