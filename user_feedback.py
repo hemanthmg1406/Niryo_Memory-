@@ -9,10 +9,7 @@ SOUND_ROOT = "sounds"
 SOUND_CACHE = {}
 
 def play_sound(category):
-    """
-    Plays a random .wav file from the specified category folder using pygame.
-    The category can now be a path like 'level/easy' or a filename like 'intro'.
-    """
+    
     sound_path = None
     folder_path = os.path.join(SOUND_ROOT, category)
 

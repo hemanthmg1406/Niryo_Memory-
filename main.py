@@ -6,12 +6,12 @@ from memory_robot import main_loop
 
 
 def start_robot():
-    print("[LAUNCH] Starting robot thread...")
+    print("[LAUNCH] Starting robot thread")
     main_loop() 
 
 
 def start_gui():
-    print("[LAUNCH] Starting GUI thread...")
+    print("[LAUNCH] Starting GUI thread")
     run_gui()
 
 
@@ -26,7 +26,7 @@ def main():
     try:
         start_gui()
     except KeyboardInterrupt:
-        print("[EXIT] Keyboard interrupt. Shutting down...")
+        print("[EXIT] Keyboard interrupt. Shutting down")
 
 
 if __name__ == "__main__":

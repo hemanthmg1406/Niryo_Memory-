@@ -261,7 +261,7 @@ def register_card(square_id, mean_vec, raw_desc, image_path, debug=False):
 def robot_play(debug=False):
     global DIFFICULTY
     print(f"[ROBOT PLAY] Planning robot move on {DIFFICULTY} difficulty...")
-    # ... (Sound and initial setup code remains unchanged) ...
+    play_sound("robot_turn")
 
     all_squares = [r + c for r in "ABCD" for c in "12345"]
     seen = set(memory_board.keys())
@@ -273,12 +273,10 @@ def robot_play(debug=False):
         and memory_board[sq].get("mean") is not None
         and memory_board[sq].get("desc") is not None
     ]
-    
-    # ----------------------------------------------------------------------
-    # --- STRATEGY 0: Confident Match (Memory Search - Hard/Medium only) ---
-    # ----------------------------------------------------------------------
-    if DIFFICULTY in ["hard", "medium"]: 
-        if DIFFICULTY == "medium" and random.random() < 0.5: 
+
+    # --- STRATEGY 0: Confident Match (Highest Priority) ---
+    if DIFFICULTY in ["hard", "medium"]:
+        if DIFFICULTY == "medium" and random.random() < 0.5: # 50% chance to forget
              pass
         else:
             for i in range(len(valid_unmatched)):
@@ -289,43 +287,28 @@ def robot_play(debug=False):
                     if is_match(sq1, card1["mean"], card1["desc"], sq2, card2["mean"], card2["desc"]):
                         log_move("robot_confident_pair_match", (sq1, sq2))
                         return [sq1, sq2]
-    
-    # ----------------------------------------------------------------------
-    # --- STRATEGY 1: Pure Random/Fallback (Primary strategy for Easy) ---
-    # This strategy finds any two available cards and picks them.
-    # ----------------------------------------------------------------------
-    
-    # This list contains ALL remaining unmatched cards, regardless of whether they have been "seen".
-    remaining = [sq for sq in all_squares if sq not in matched] 
-    
+
+    # --- STRATEGY 1: Flip unseen cards ---
+    unseen = [sq for sq in all_squares if sq not in seen]
+    if len(unseen) >= 2:
+        a, b = random.sample(unseen, 2)
+        log_move("robot_flip_unseen", (a, b))
+        return [a, b]
+    elif len(unseen) == 1:
+        a = unseen[0]
+        fallback = [sq for sq in all_squares if sq != a and sq not in matched]
+        b = random.choice(fallback) if fallback else a
+        log_move("robot_flip_unseen_and_fallback", (a, b))
+        return [a, b]
+
+    # --- STRATEGY 2: Fallback unmatched ---
+    remaining = [sq for sq in all_squares if sq not in matched]
     if len(remaining) >= 2:
         a, b = random.sample(remaining, 2)
-        
-        # If Easy mode, execute this strategy and return immediately.
-        if DIFFICULTY == "easy":
-            log_move("robot_fallback_easy", (a, b))
-            return [a, b]
-            
-    # ----------------------------------------------------------------------
-    # --- STRATEGY 2: Flip unseen cards (Standard/Medium continuation) ---
-    # This block executes ONLY if Hard/Medium failed their memory search and 
-    # needs to decide where to reveal a new card.
-    # ----------------------------------------------------------------------
-    
-    if DIFFICULTY in ["hard", "medium"]:
-        unseen = [sq for sq in all_squares if sq not in seen]
-        if len(unseen) >= 2:
-            a, b = random.sample(unseen, 2)
-            log_move("robot_flip_unseen", (a, b))
-            return [a, b]
-        elif len(unseen) == 1:
-            a = unseen[0]
-            fallback = [sq for sq in all_squares if sq != a and sq not in matched]
-            b = random.choice(fallback) if fallback else a
-            log_move("robot_flip_unseen_and_fallback", (a, b))
-            return [a, b]
-    
-    # --- STRATEGY 3: Final single (For any mode) ---
+        log_move("robot_fallback", (a, b))
+        return [a, b]
+
+    # --- STRATEGY 3: Final single ---
     if len(remaining) == 1:
         log_move("robot_final_single", remaining[0])
         return [remaining[0], remaining[0]]

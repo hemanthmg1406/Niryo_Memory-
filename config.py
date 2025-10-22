@@ -21,8 +21,8 @@ SOUND_FOLDER = "sounds/chocolate/"
 
 # --- Robot Pose Definitions (Joint Angles) ---
 # Each list represents the angles for the 6 joints of the robot.
-HOME_POSE = [0.22, -0.0, 0.21, -2.96, 1.54, -2.9783]
-PRE_GRASP_POSE = [0.26, 0.03, 0.15, 1.55, 0.2, 1.497]
+HOME_POSE = [0.13, 0.21, 0.12, 2.63, 1.49, -2.8043]
+PRE_GRASP_POSE = [0.13, 0.21, 0.07, 2.63, 1.49, -2.8043]
 GIVE_POSE = [0.41, 0.0, 0.25, -0.03, 1.06, -0.0264]
 
 # --- Visual & Tool Configuration ---
